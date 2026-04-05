@@ -98,40 +98,7 @@ const calculateAge = (birthday: string) => {
 
 const getCleanClient = (client: any) => {
   if (!client) return null;
-  let cleanClient = { ...client };
-  let others = client.outros || '';
-  
-  // Extract photo
-  if (others.includes('[FOTO]')) {
-    const photoParts = others.split('[FOTO]');
-    if (photoParts.length > 1) {
-      const photoContent = photoParts[1].split('[/FOTO]');
-      if (photoContent.length > 1) {
-        cleanClient.foto_url = photoContent[0];
-        others = photoParts[0] + photoContent[1];
-      }
-    }
-  }
-
-  // Extract extra data
-  if (others.includes('[EXTRA_DATA]')) {
-    const extraParts = others.split('[EXTRA_DATA]');
-    if (extraParts.length > 1) {
-      const extraContent = extraParts[1].split('[/EXTRA_DATA]');
-      if (extraContent.length > 1) {
-        try {
-          const extraData = JSON.parse(extraContent[0]);
-          cleanClient = { ...cleanClient, ...extraData };
-          others = extraParts[0] + extraContent[1];
-        } catch (e) {
-          console.error("Error parsing extra data:", e);
-        }
-      }
-    }
-  }
-  
-  cleanClient.outros = others.trim();
-  return cleanClient;
+  return { ...client };
 };
 
 const getClientPhoto = (client: any) => {
@@ -195,6 +162,7 @@ export default function Home() {
     activePipeline: 0,
     salesThisMonth: 0
   });
+  const [dbError, setDbError] = useState<string | null>(null);
 
   const updateMetrics = (clientList: any[]) => {
     const activePipelineValue = clientList
@@ -217,19 +185,44 @@ export default function Home() {
 
     // Fetch initial clients
     const fetchClients = async () => {
-      console.log("Fetching clients for user:", user.id);
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error("Error fetching clients:", error);
-      } else if (data) {
-        console.log("Clients fetched:", data.length);
-        setClients(data);
-        updateMetrics(data);
+      try {
+        if (!supabase) {
+          console.error("[DIAGNOSTIC] Supabase client is not initialized");
+          setDbError("Cliente Supabase não inicializado.");
+          return;
+        }
+        
+        console.log("[DIAGNOSTIC] Fetching clients for user:", user.id);
+        const { data, error } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          const detailedError: any = {};
+          Object.getOwnPropertyNames(error).forEach(key => {
+            detailedError[key] = (error as any)[key];
+          });
+          
+          console.error("[DIAGNOSTIC] Supabase error fetching clients:", detailedError);
+          setDbError(`Erro no banco de dados: ${error.message || 'Erro desconhecido'}`);
+          
+          if (error.code === 'PGRST204' || error.message?.includes('column')) {
+            console.warn("[DIAGNOSTIC] Column mismatch detected. This usually means the database schema is out of sync with the code.");
+          }
+          if (error.code === '42P01') {
+            console.warn("[DIAGNOSTIC] Table 'clients' does not exist.");
+          }
+        } else if (data) {
+          console.log("[DIAGNOSTIC] Clients fetched successfully:", data.length);
+          setClients(data);
+          updateMetrics(data);
+          setDbError(null);
+        }
+      } catch (err: any) {
+        console.error("[DIAGNOSTIC] Unexpected exception in fetchClients:", err.message || err);
+        setDbError(`Exceção inesperada: ${err.message || 'Erro desconhecido'}`);
       }
     };
 
@@ -259,6 +252,17 @@ export default function Home() {
     <div className="flex min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
       {/* Sidebar Navigation */}
       <aside className="fixed left-0 top-0 h-full w-72 bg-white border-r border-slate-100 z-50 flex flex-col">
+        {dbError && (
+          <div className="bg-red-600 text-white p-2 text-[0.6rem] font-bold text-center flex flex-col gap-1 items-center">
+            <div className="animate-pulse">⚠️ ERRO DE BANCO: {dbError}</div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded uppercase tracking-tighter"
+            >
+              Recarregar App
+            </button>
+          </div>
+        )}
         <div className="px-8 py-10 flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
             <Building2 className="w-6 h-6 text-white" />
@@ -297,8 +301,15 @@ export default function Home() {
         </nav>
 
         <div className="px-6 py-10 space-y-2 border-t border-slate-50">
-          <button className="w-full flex items-center gap-4 px-5 py-3 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all text-sm font-medium">
-            <Settings className="w-5 h-5 text-slate-300" />
+          <button 
+            onClick={() => setActiveView('settings')}
+            className={`w-full flex items-center gap-4 px-5 py-3 rounded-xl transition-all text-sm font-medium ${
+              activeView === 'settings' 
+                ? 'text-blue-600 font-bold bg-blue-50' 
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Settings className={`w-5 h-5 ${activeView === 'settings' ? 'text-blue-600' : 'text-slate-300'}`} />
             Settings
           </button>
           <button className="w-full flex items-center gap-4 px-5 py-3 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all text-sm font-medium">
@@ -342,7 +353,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3 pl-6 border-l border-slate-100 group cursor-pointer">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-slate-900">{profile?.full_name || user?.email?.split('@')[0]}</p>
+                <p className="text-sm font-bold text-slate-900">{profile?.name || user?.email?.split('@')[0]}</p>
                 <p className="text-xs text-slate-400">Corretor</p>
               </div>
               <img 
@@ -1403,7 +1414,7 @@ function SettingsView({ profile }: { profile: any }) {
   const [name, setName] = useState(profile?.name || '');
   const [photoUrl, setPhotoUrl] = useState(profile?.photo_url || '');
   const [loading, setLoading] = useState(false);
-  const { user } = useSupabase();
+  const { user, refreshProfile } = useSupabase();
 
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -1507,6 +1518,16 @@ function SettingsView({ profile }: { profile: any }) {
         >
           {loading ? 'Salvando...' : 'Salvar Alterações'}
         </button>
+
+        <div className="pt-8 border-t border-slate-100">
+          <button 
+            onClick={() => supabase.auth.signOut()}
+            className="flex items-center gap-2 text-red-600 font-bold hover:text-red-700 transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            Sair da Conta
+          </button>
+        </div>
       </div>
 
       {/* Modal de Corte de Imagem */}
@@ -1709,42 +1730,33 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
     
     setLoading(true);
     try {
-      // Separate fields that exist in the DB from those that don't
-      const extraData = {
-        rede_social: formData.socialMedia,
-        documento: formData.document,
-        codigo: formData.code,
-        andar: formData.floor,
-        suites: formData.suites,
-        banheiros: formData.bathrooms,
-        imovel_enviado: formData.propertySent,
-        feedback: formData.feedback,
-        observacoes: formData.observations,
-        contato: formData.contact,
-      };
-
-      let packedOutros = formData.others || '';
-      if (formData.photoUrl) {
-        packedOutros = `[FOTO]${formData.photoUrl}[/FOTO]${packedOutros}`;
-      }
-      packedOutros = `[EXTRA_DATA]${JSON.stringify(extraData)}[/EXTRA_DATA]${packedOutros}`;
-
       const payload: any = {
         user_id: user.id,
         nome: formData.name,
         telefone: formData.phone,
         email: formData.email,
         whatsapp: formData.whatsapp,
+        rede_social: formData.socialMedia,
+        documento: formData.document,
         profissao: formData.profession,
         v_l: formData.vl,
+        codigo: formData.code,
         valor_buscado: formData.valueSought && !isNaN(Number(formData.valueSought)) ? Number(formData.valueSought) : 0,
         status: formData.status,
         bairros: [formData.neighborhood1, formData.neighborhood2, formData.neighborhood3].filter(Boolean),
         tipo: formData.propertyType,
         metragem_quadrada: formData.squareFootage && !isNaN(Number(formData.squareFootage)) ? Number(formData.squareFootage) : 0,
+        andar: formData.floor && !isNaN(Number(formData.floor)) ? Number(formData.floor) : 0,
         dormitorios: formData.bedrooms && !isNaN(Number(formData.bedrooms)) ? Number(formData.bedrooms) : 0,
+        suites: formData.suites && !isNaN(Number(formData.suites)) ? Number(formData.suites) : 0,
+        banheiros: formData.bathrooms && !isNaN(Number(formData.bathrooms)) ? Number(formData.bathrooms) : 0,
         vagas: formData.parkingSpaces && !isNaN(Number(formData.parkingSpaces)) ? Number(formData.parkingSpaces) : 0,
-        outros: packedOutros,
+        outros: formData.others,
+        imovel_enviado: formData.propertySent,
+        feedback: formData.feedback,
+        observacoes: formData.observations,
+        contato: formData.contact,
+        foto_url: formData.photoUrl,
       };
 
       if (formData.entryDate) payload.data_entrada = formData.entryDate;

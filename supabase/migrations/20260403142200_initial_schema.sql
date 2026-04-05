@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS clients (
   v_l TEXT, -- Venda / Locação
   codigo TEXT, -- Código do Imóvel
   valor_buscado NUMERIC,
-  status TEXT DEFAULT 'Ativo' CHECK (status IN ('Ativo', 'Negociando', 'Nutrindo', 'Parado', 'Fechado')),
+  status TEXT DEFAULT 'Novo' CHECK (status IN ('Novo', 'Ativo', 'Visita', 'Negociação', 'Fechado', 'Parado', 'Perdido')),
   bairros TEXT[], -- Array of neighborhoods
   tipo TEXT, -- Casa, Apartamento, etc.
   metragem_quadrada NUMERIC,
@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS clients (
   dormitorios INTEGER,
   suites INTEGER,
   vagas INTEGER,
+  banheiros INTEGER,
   outros TEXT,
   imovel_enviado TEXT,
   feedback TEXT,
