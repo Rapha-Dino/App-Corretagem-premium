@@ -164,6 +164,9 @@ export default function Home() {
     salesThisMonth: 0
   });
   const [dbError, setDbError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refreshClientsData = () => setRefreshKey(prev => prev + 1);
 
   const updateMetrics = (clientList: any[]) => {
     const activePipelineValue = clientList
@@ -240,7 +243,7 @@ export default function Home() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, refreshKey]);
 
   const handleLogout = () => supabase.auth.signOut();
 
@@ -370,14 +373,15 @@ export default function Home() {
         <div className="p-8 flex-1">
           <AnimatePresence mode="wait">
             {activeView === 'dashboard' && <Dashboard metrics={metrics} clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} />}
-            {activeView === 'clients' && <ClientLedger clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} />}
+            {activeView === 'clients' && <ClientLedger clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} onRefresh={refreshClientsData} />}
             {activeView === 'pipeline' && <Pipeline clients={clients} onClientClick={openClientDetail} />}
             {activeView === 'client-detail' && selectedClientId && (
               <ClientDetail 
                 clientId={selectedClientId} 
                 onBack={() => setActiveView('clients')} 
                 onEdit={(client) => { setEditingClient(client); setIsLeadModalOpen(true); }}
-                onDelete={() => { setSelectedClientId(null); setActiveView('clients'); }}
+                onDelete={() => { setSelectedClientId(null); setActiveView('clients'); refreshClientsData(); }}
+                onRefresh={refreshClientsData}
               />
             )}
             {activeView === 'settings' && <SettingsView profile={profile} />}
@@ -397,6 +401,7 @@ export default function Home() {
         isOpen={isLeadModalOpen} 
         onClose={() => { setIsLeadModalOpen(false); setEditingClient(null); }} 
         initialData={editingClient}
+        onSuccess={refreshClientsData}
       />
     </div>
   );
@@ -558,10 +563,11 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
   );
 }
 
-function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], onClientClick: (id: string) => void, onAddLead: () => void }) {
+function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { clients: any[], onClientClick: (id: string) => void, onAddLead: () => void, onRefresh: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [isImporting, setIsImporting] = useState(false);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useSupabase();
@@ -573,70 +579,105 @@ function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], o
     }
   }, [notification]);
 
+  const handleClearAll = async () => {
+    if (!user) return;
+    
+    try {
+      setIsImporting(true);
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setNotification({
+        type: 'success',
+        message: "Todos os clientes foram excluídos com sucesso!"
+      });
+      setShowConfirmClear(false);
+      onRefresh();
+    } catch (err: any) {
+      console.error("Clear error:", err);
+      setNotification({
+        type: 'error',
+        message: "Erro ao excluir clientes: " + err.message
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
+
+    const excelDateToISO = (val: any) => {
+      if (!val || String(val).trim() === '' || String(val).toLowerCase().includes('localizado')) return undefined;
+      
+      let strVal = String(val).trim();
+      
+      // Handle DD/MM/YYYY format
+      const ddmmyyyy = strVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (ddmmyyyy) {
+        const day = ddmmyyyy[1].padStart(2, '0');
+        const month = ddmmyyyy[2].padStart(2, '0');
+        const year = ddmmyyyy[3];
+        return `${year}-${month}-${day}`;
+      }
+
+      const numVal = strVal.replace(',', '.');
+      const num = Number(numVal);
+      
+      // Check if it's a valid Excel date number (roughly between year 1900 and 2100)
+      if (!isNaN(num) && num > 1 && num < 100000) {
+        try {
+          const date = new Date((num - 25569) * 86400 * 1000);
+          if (!isNaN(date.getTime())) {
+            return date.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          return undefined;
+        }
+      }
+      
+      // If it's a string, try to parse it normally
+      try {
+        const date = new Date(strVal);
+        if (!isNaN(date.getTime()) && date.getFullYear() > 1900) {
+          return date.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // Ignore
+      }
+      
+      return undefined;
+    };
 
     setIsImporting(true);
     
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      delimiter: ";", // Support semicolon separated files
       complete: async (results) => {
         try {
           if (results.errors.length > 0) {
+            // If semicolon failed, try auto-detect
+            if (results.errors[0].code === "TooFewFields") {
+              Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: async (res) => {
+                  await processImport(res.data);
+                }
+              });
+              return;
+            }
             throw new Error(`Erro ao processar CSV: ${results.errors[0].message}`);
           }
 
-          const importedClients = results.data.map((row: any) => {
-            // Normalize keys to find matches
-            const normalizedRow: any = {};
-            Object.keys(row).forEach(key => {
-              const normalizedKey = key.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '');
-              normalizedRow[normalizedKey] = row[key];
-            });
-
-            const client: any = {
-              user_id: user.id,
-              data_entrada: new Date().toISOString().split('T')[0],
-              status: 'Ativo',
-              bairros: [],
-              historico_conversas: []
-            };
-
-            // Map common fields
-            if (normalizedRow.nome || normalizedRow.name) client.nome = normalizedRow.nome || normalizedRow.name;
-            if (normalizedRow.email) client.email = normalizedRow.email;
-            if (normalizedRow.whatsapp) client.whatsapp = normalizedRow.whatsapp;
-            if (normalizedRow.telefone || normalizedRow.phone) client.telefone = normalizedRow.telefone || normalizedRow.phone;
-            
-            const valorRaw = normalizedRow.valorbuscado || normalizedRow.valor || normalizedRow.value || normalizedRow.orcamento || normalizedRow.budget;
-            if (valorRaw) {
-              const numVal = String(valorRaw).replace(/[R$\s.]/g, '').replace(',', '.');
-              client.valor_buscado = isNaN(Number(numVal)) ? 0 : Number(numVal);
-            }
-
-            if (normalizedRow.tipo || normalizedRow.type) client.tipo = normalizedRow.tipo || normalizedRow.type;
-            
-            const bairroRaw = normalizedRow.bairro || normalizedRow.neighborhood;
-            if (bairroRaw && bairroRaw !== 'N/A') {
-              client.bairros = [bairroRaw];
-            }
-
-            return client;
-          }).filter(c => c.nome);
-
-          if (importedClients.length === 0) {
-            throw new Error("Nenhum cliente válido encontrado no arquivo. Verifique se a coluna 'Nome' existe.");
-          }
-
-          const { error } = await supabase.from('clients').insert(importedClients);
-          if (error) throw error;
-          
-          setNotification({ 
-            type: 'success', 
-            message: `${importedClients.length} clientes importados com sucesso!` 
-          });
+          await processImport(results.data);
         } catch (err: any) {
           console.error("Import error:", err);
           setNotification({ 
@@ -656,6 +697,89 @@ function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], o
         setIsImporting(false);
       }
     });
+
+    async function processImport(data: any[]) {
+      try {
+        const importedClients = data.map((row: any) => {
+          // Normalize keys to find matches
+          const normalizedRow: any = {};
+          Object.keys(row).forEach(key => {
+            const normalizedKey = key.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '');
+            normalizedRow[normalizedKey] = row[key];
+          });
+
+          const client: any = {
+            user_id: user.id,
+            data_entrada: new Date().toISOString().split('T')[0],
+            status: 'Ativo',
+            bairros: [],
+            historico_conversas: []
+          };
+
+          // Map common fields
+          if (normalizedRow.nome || normalizedRow.name) client.nome = normalizedRow.nome || normalizedRow.name;
+          if (normalizedRow.email) client.email = normalizedRow.email;
+          if (normalizedRow.whatsapp) client.whatsapp = normalizedRow.whatsapp;
+          if (normalizedRow.telefone || normalizedRow.phone) client.telefone = normalizedRow.telefone || normalizedRow.phone;
+          if (normalizedRow.redesocial || normalizedRow.social) client.rede_social = normalizedRow.redesocial || normalizedRow.social;
+          if (normalizedRow.documento || normalizedRow.document) client.documento = normalizedRow.documento || normalizedRow.document;
+          if (normalizedRow.prof || normalizedRow.profession) client.profissao = normalizedRow.prof || normalizedRow.profession;
+          
+          client.v_l = normalizedRow.vl || 'Venda';
+          client.codigo = normalizedRow.codigo || normalizedRow.code || normalizedRow.cdigo || 'S/C';
+          
+          if (normalizedRow.aniversario || normalizedRow.birthday) client.aniversario = excelDateToISO(normalizedRow.aniversario || normalizedRow.birthday);
+          if (normalizedRow.dataentrada || normalizedRow.entrydate) client.data_entrada = excelDateToISO(normalizedRow.dataentrada || normalizedRow.entrydate);
+          if (normalizedRow.outros || normalizedRow.others || normalizedRow.obs || normalizedRow.observacoes) client.observacoes = normalizedRow.outros || normalizedRow.others || normalizedRow.obs || normalizedRow.observacoes;
+          
+          const valorRaw = normalizedRow.valorbuscado || normalizedRow.valor || normalizedRow.value || normalizedRow.orcamento || normalizedRow.budget || normalizedRow.valorbuscado;
+          if (valorRaw) {
+            const numVal = String(valorRaw).replace(/[R$\s.]/g, '').replace(',', '.');
+            client.valor_buscado = isNaN(Number(numVal)) ? 0 : Number(numVal);
+          }
+
+          if (normalizedRow.tipo || normalizedRow.type) client.tipo = normalizedRow.tipo || normalizedRow.type;
+          
+          // Bairros
+          const bairros = [];
+          if (normalizedRow.bairro1) bairros.push(normalizedRow.bairro1);
+          if (normalizedRow.bairro2) bairros.push(normalizedRow.bairro2);
+          if (normalizedRow.bairro3) bairros.push(normalizedRow.bairro3);
+          if (bairros.length > 0) {
+            client.bairros = bairros;
+          } else if (normalizedRow.bairro || normalizedRow.neighborhood) {
+            client.bairros = [normalizedRow.bairro || normalizedRow.neighborhood];
+          }
+
+          // Additional fields from the user's CSV
+          if (normalizedRow.m) client.metragem_quadrada = Number(String(normalizedRow.m).replace(',', '.'));
+          if (normalizedRow.andar) client.andar = Number(normalizedRow.andar);
+          if (normalizedRow.dormt) client.dormitorios = Number(normalizedRow.dormt);
+          if (normalizedRow.suites) client.suites = Number(normalizedRow.suites);
+          if (normalizedRow.vagas) client.vagas = Number(normalizedRow.vagas);
+          if (normalizedRow.imovenv) client.imovel_enviado = normalizedRow.imovenv;
+          if (normalizedRow.feedback) client.feedback = normalizedRow.feedback;
+          if (normalizedRow.ultimocontato) client.contato = normalizedRow.ultimocontato;
+
+          return client;
+        }).filter(c => c.nome);
+
+        if (importedClients.length === 0) {
+          throw new Error("Nenhum cliente válido encontrado no arquivo. Verifique se a coluna 'Nome' existe.");
+        }
+
+        const { error } = await supabase.from('clients').insert(importedClients);
+        if (error) throw error;
+        
+        setNotification({ 
+          type: 'success', 
+          message: `${importedClients.length} clientes importados com sucesso!` 
+        });
+        onRefresh();
+      } catch (err: any) {
+        throw err;
+      }
+    }
   };
 
   const filters = ['Todos', 'Lead', 'Visita', 'Negociação', 'Venda'];
@@ -720,6 +844,36 @@ function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], o
             className="hidden" 
             accept=".csv"
           />
+          <div className="relative">
+            <button 
+              onClick={() => setShowConfirmClear(!showConfirmClear)}
+              disabled={isImporting}
+              className="flex-1 md:flex-none px-6 py-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-all disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              Limpar Tudo
+            </button>
+            
+            {showConfirmClear && (
+              <div className="absolute top-full mt-2 right-0 w-64 bg-white border border-slate-100 shadow-xl rounded-2xl p-4 z-50">
+                <p className="text-[0.7rem] font-bold text-slate-600 mb-3">Tem certeza? Isso apagará TODOS os clientes.</p>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleClearAll}
+                    className="flex-1 py-2 bg-red-500 text-white text-[0.65rem] font-bold rounded-lg hover:bg-red-600 transition-all"
+                  >
+                    Sim, Apagar
+                  </button>
+                  <button 
+                    onClick={() => setShowConfirmClear(false)}
+                    className="flex-1 py-2 bg-slate-100 text-slate-600 text-[0.65rem] font-bold rounded-lg hover:bg-slate-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
@@ -772,10 +926,11 @@ function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], o
       {/* Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="grid grid-cols-12 px-8 py-5 border-b border-slate-50 text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">
-          <div className="col-span-4">Cliente</div>
-          <div className="col-span-2">Tipo de Imóvel</div>
-          <div className="col-span-2">Valor Estimado</div>
-          <div className="col-span-3">Última Interação</div>
+          <div className="col-span-3">Cliente</div>
+          <div className="col-span-2">Código / V/L</div>
+          <div className="col-span-2">Telefone / WhatsApp</div>
+          <div className="col-span-2">Profissão / Doc</div>
+          <div className="col-span-2">Status / Atualização</div>
           <div className="col-span-1"></div>
         </div>
         <div className="divide-y divide-slate-50">
@@ -791,7 +946,7 @@ function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], o
                 onClick={() => onClientClick(client.id)}
                 className="grid grid-cols-12 px-8 py-6 items-center hover:bg-slate-50 transition-colors cursor-pointer group"
               >
-                <div className="col-span-4 flex items-center gap-4">
+                <div className="col-span-3 flex items-center gap-4">
                   <img 
                     src={getClientPhoto(client) || `https://picsum.photos/seed/${client.id}/100/100`} 
                     alt="" 
@@ -803,27 +958,31 @@ function ClientLedger({ clients, onClientClick, onAddLead }: { clients: any[], o
                   </div>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-sm text-slate-600 font-medium">{client.tipo || 'N/A'}</p>
+                  <p className="text-sm font-bold text-slate-900">{client.codigo || 'S/C'}</p>
+                  <p className="text-[0.65rem] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{client.v_l || 'N/A'}</p>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-sm font-bold text-blue-600">R$ {client.valor_buscado?.toLocaleString() || '0'}</p>
+                  <p className="text-sm text-slate-600 font-medium">{client.whatsapp || client.telefone || 'N/A'}</p>
                 </div>
-                <div className="col-span-3 flex items-center justify-between pr-8">
+                <div className="col-span-2">
+                  <p className="text-sm text-slate-600 font-medium">{client.profissao || 'N/A'}</p>
+                  <p className="text-[0.65rem] text-slate-400 mt-0.5">{client.documento || ''}</p>
+                </div>
+                <div className="col-span-2 flex items-center justify-between pr-8">
                   <div>
-                    <p className="text-sm text-slate-600">
-                      {client.historico_conversas?.[client.historico_conversas.length - 1]?.date 
-                        ? format(new Date(client.historico_conversas[client.historico_conversas.length - 1].date), 'dd/MM, HH:mm')
-                        : 'Sem registro'}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        client.status === 'Fechado' ? 'bg-emerald-500' :
+                        client.status === 'Visita' ? 'bg-blue-500' :
+                        client.status === 'Negociação' ? 'bg-amber-500' :
+                        'bg-slate-300'
+                      }`}></span>
+                      <p className="text-xs font-bold text-slate-900">{client.status}</p>
+                    </div>
+                    <p className="text-[0.65rem] text-slate-400 font-medium">
+                      {client.updated_at ? format(new Date(client.updated_at), 'dd/MM/yyyy') : 'Sem data'}
                     </p>
-                    <p className="text-[0.65rem] text-slate-400 mt-0.5">WhatsApp</p>
                   </div>
-                  <span className={`px-4 py-1.5 rounded-full text-[0.6rem] font-bold uppercase tracking-widest ${
-                    client.status === 'Negociação' ? 'bg-emerald-100 text-emerald-600' :
-                    client.status === 'Visita' ? 'bg-blue-100 text-blue-600' :
-                    'bg-slate-100 text-slate-600'
-                  }`}>
-                    {client.status}
-                  </span>
                 </div>
                 <div className="col-span-1 flex justify-end">
                   <button className="p-2 text-slate-300 hover:text-slate-600 transition-colors">
@@ -960,7 +1119,7 @@ function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (
   );
 }
 
-function ClientDetail({ clientId, onBack, onEdit, onDelete }: { clientId: string, onBack: () => void, onEdit: (client: any) => void, onDelete: () => void }) {
+function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clientId: string, onBack: () => void, onEdit: (client: any) => void, onDelete: () => void, onRefresh: () => void }) {
   const [client, setClient] = useState<any>(null);
   const [newInteraction, setNewInteraction] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1024,6 +1183,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete }: { clientId: string
       if (!error) {
         setNewInteraction('');
         setClient((prev: any) => ({ ...prev, historico_conversas: newHistory }));
+        onRefresh();
       }
     } catch (error) {
       console.error(error);
@@ -1048,6 +1208,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete }: { clientId: string
       
       if (!error) {
         setClient((prev: any) => ({ ...prev, historico_conversas: newHistory }));
+        onRefresh();
       }
     } catch (error) {
       console.error(error);
@@ -1070,6 +1231,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete }: { clientId: string
         setShowDeleteConfirm(false);
       } else {
         onDelete();
+        onRefresh();
       }
     } catch (error: any) {
       console.error("Unexpected delete error:", error);
@@ -1102,8 +1264,6 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete }: { clientId: string
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Lead ID: #{client.id.substring(0, 8)}</span>
-              <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-              <span className="text-[0.65rem] font-bold text-blue-600 uppercase tracking-widest">{client.status}</span>
             </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">
               {client.nome}
@@ -1113,6 +1273,37 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete }: { clientId: string
                 </span>
               )}
             </h2>
+            <div className="flex flex-wrap gap-6 mt-6">
+              <div className="flex flex-col">
+                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Venda / Locação</p>
+                <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
+                  {client.v_l || 'Venda'}
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Status Lead</p>
+                <div className={`px-10 py-3 rounded-2xl text-base font-black shadow-lg ${
+                  client.status === 'Fechado' ? 'bg-emerald-500 text-white shadow-emerald-200' :
+                  client.status === 'Visita' ? 'bg-blue-600 text-white shadow-blue-200' :
+                  client.status === 'Negociação' ? 'bg-amber-500 text-white shadow-amber-200' :
+                  'bg-slate-100 text-slate-600'
+                } text-center min-w-[160px]`}>
+                  {client.status}
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Código Imóvel</p>
+                <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
+                  {client.codigo || 'S/C'}
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Budget</p>
+                <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
+                  R$ {client.valor_buscado?.toLocaleString() || '0'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex gap-4">
@@ -1587,7 +1778,7 @@ function SettingsView({ profile }: { profile: any }) {
   );
 }
 
-function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose: () => void, initialData?: any }) {
+function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolean, onClose: () => void, initialData?: any, onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
@@ -1819,6 +2010,7 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
         throw error;
       }
       
+      onSuccess();
       onClose();
     } catch (error: any) {
       console.error("Error saving lead:", error);
