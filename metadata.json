@@ -1,0 +1,5 @@
+{
+  "name": "Painel do Corretor",
+  "description": "Aplicativo destinado à organização de dados de clientes e gestão de leads para corretores de imóveis.",
+  "requestFramePermissions": []
+}
