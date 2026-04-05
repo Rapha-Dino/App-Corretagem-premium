@@ -11,12 +11,46 @@ export const SupabaseAuthGuard: React.FC<{ children: React.ReactNode }> = ({ chi
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+
+  React.useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsUpdatingPassword(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    
+    setAuthLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setSuccess("Senha atualizada com sucesso! Você já pode entrar.");
+      setIsUpdatingPassword(false);
+      setPassword('');
+    } catch (err: any) {
+      console.error("Update password error:", err);
+      setError(err.message || "Erro ao atualizar senha.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     try {
       setError(null);
+      setSuccess(null);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -30,17 +64,39 @@ export const SupabaseAuthGuard: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    
+    setAuthLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      setSuccess("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+    } catch (err: any) {
+      console.error("Reset error:", err);
+      setError(err.message || "Erro ao enviar e-mail de recuperação.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
     
     setAuthLoading(true);
     setError(null);
+    setSuccess(null);
     try {
       if (isRegistering) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setError("Verifique seu e-mail para confirmar o cadastro.");
+        setSuccess("Verifique seu e-mail para confirmar o cadastro.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -93,65 +149,163 @@ export const SupabaseAuthGuard: React.FC<{ children: React.ReactNode }> = ({ chi
           </div>
 
           <div className="p-8">
-            <form onSubmit={handleEmailAuth} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[0.625rem] uppercase font-black text-slate-500 ml-1">E-mail</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input 
-                    required
-                    type="email" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-900/20 outline-none transition-all"
-                    placeholder="seu@email.com"
-                  />
+            {isUpdatingPassword ? (
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div className="text-center mb-6">
+                  <h2 className="text-lg font-bold text-blue-900">Atualizar Senha</h2>
+                  <p className="text-xs text-slate-500">Digite sua nova senha abaixo.</p>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[0.625rem] uppercase font-black text-slate-500 ml-1">Senha</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input 
-                    required
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-900/20 outline-none transition-all"
-                    placeholder="••••••••"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[0.625rem] uppercase font-black text-slate-500 ml-1">Nova Senha</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      required
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-900/20 outline-none transition-all"
+                      placeholder="••••••••"
+                    />
+                  </div>
                 </div>
-              </div>
+                <AnimatePresence>
+                  {error && (
+                    <motion.p 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-xs text-red-600 font-bold text-center"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                  {success && (
+                    <motion.p 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-xs text-emerald-600 font-bold text-center"
+                    >
+                      {success}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-4 bg-blue-900 text-white rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
+                >
+                  {authLoading ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <>
+                      <Lock className="w-5 h-5" />
+                      Atualizar Senha
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={isResettingPassword ? handleResetPassword : handleEmailAuth} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[0.625rem] uppercase font-black text-slate-500 ml-1">E-mail</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      required
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-900/20 outline-none transition-all"
+                      placeholder="seu@email.com"
+                    />
+                  </div>
+                </div>
 
-              <AnimatePresence>
-                {error && (
-                  <motion.p 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="text-xs text-red-600 font-bold text-center"
+                {!isResettingPassword && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[0.625rem] uppercase font-black text-slate-500 ml-1">Senha</label>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsResettingPassword(true);
+                          setError(null);
+                          setSuccess(null);
+                        }}
+                        className="text-[0.625rem] uppercase font-black text-blue-900 hover:underline"
+                      >
+                        Esqueceu a senha?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        required
+                        type="password" 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-900/20 outline-none transition-all"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.p 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-xs text-red-600 font-bold text-center"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                  {success && (
+                    <motion.p 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-xs text-emerald-600 font-bold text-center"
+                    >
+                      {success}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-4 bg-blue-900 text-white rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
+                >
+                  {authLoading ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <>
+                      {isResettingPassword ? <Mail className="w-5 h-5" /> : isRegistering ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+                      {isResettingPassword ? 'Enviar E-mail de Recuperação' : isRegistering ? 'Criar Conta' : 'Entrar'}
+                    </>
+                  )}
+                </button>
+
+                {isResettingPassword && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsResettingPassword(false);
+                      setError(null);
+                      setSuccess(null);
+                    }}
+                    className="w-full text-center text-xs text-blue-900 font-bold hover:underline"
                   >
-                    {error}
-                  </motion.p>
+                    Voltar para o Login
+                  </button>
                 )}
-              </AnimatePresence>
-
-              <button
-                type="submit"
-                disabled={authLoading}
-                className="w-full py-4 bg-blue-900 text-white rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
-              >
-                {authLoading ? (
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-                ) : (
-                  <>
-                    {isRegistering ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-                    {isRegistering ? 'Criar Conta' : 'Entrar'}
-                  </>
-                )}
-              </button>
-            </form>
+              </form>
+            )}
 
             <div className="relative my-8">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>

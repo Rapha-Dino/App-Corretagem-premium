@@ -45,7 +45,7 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 id: userId, 
                 name: userData.user.user_metadata.full_name || userData.user.email?.split('@')[0] || 'Novo Usuário',
                 email: userData.user.email,
-                role: (userData.user.email === 'rafaandouni@gmail.com' || userData.user.email === 'rogerio.diniz@hotmail.com') ? 'admin' : 'corretor'
+                role: (userData.user.email === 'rafaandouni@gmail.com' || userData.user.email === 'rogerio.diniz@hotmail.com' || userData.user.email === 'raphaell_diniz@hotmail.com') ? 'admin' : 'corretor'
               }
             ])
             .select()
