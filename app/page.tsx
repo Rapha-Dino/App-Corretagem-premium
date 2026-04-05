@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSupabase } from '@/lib/SupabaseProvider';
 import { supabase } from '@/lib/supabase';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, 
   Users, 
@@ -26,6 +26,7 @@ import {
   MessageCircle,
   Clock,
   AlertCircle,
+  ShieldAlert,
   Camera,
   Trash2,
   Upload,
@@ -1588,6 +1589,7 @@ function SettingsView({ profile }: { profile: any }) {
 
 function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose: () => void, initialData?: any }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -1723,13 +1725,45 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
     }
   };
 
+  const parseNumeric = (val: string) => {
+    if (!val) return 0;
+    // Remove dots (thousands separator) and replace comma with dot (decimal separator)
+    const cleanVal = val.replace(/\./g, '').replace(',', '.');
+    const num = Number(cleanVal);
+    return isNaN(num) ? 0 : num;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    setError(null);
     
-    setLoading(true);
+    // Validation
+    if (!formData.name.trim()) {
+      setError("O nome é obrigatório.");
+      return;
+    }
+    if (!formData.phone.trim() && !formData.whatsapp.trim()) {
+      setError("Pelo menos um telefone ou WhatsApp é obrigatório.");
+      return;
+    }
+    if (!formData.email.trim()) {
+      setError("O e-mail é obrigatório.");
+      return;
+    }
+    if (!formData.code.trim()) {
+      setError("O código do imóvel é obrigatório.");
+      return;
+    }
+
     try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) {
+        setError("Sessão expirada. Por favor, faça login novamente.");
+        return;
+      }
+      
+      setLoading(true);
       const payload: any = {
         user_id: user.id,
         nome: formData.name,
@@ -1741,16 +1775,16 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
         profissao: formData.profession,
         v_l: formData.vl,
         codigo: formData.code,
-        valor_buscado: formData.valueSought && !isNaN(Number(formData.valueSought)) ? Number(formData.valueSought) : 0,
+        valor_buscado: parseNumeric(formData.valueSought),
         status: formData.status,
         bairros: [formData.neighborhood1, formData.neighborhood2, formData.neighborhood3].filter(Boolean),
         tipo: formData.propertyType,
-        metragem_quadrada: formData.squareFootage && !isNaN(Number(formData.squareFootage)) ? Number(formData.squareFootage) : 0,
-        andar: formData.floor && !isNaN(Number(formData.floor)) ? Number(formData.floor) : 0,
-        dormitorios: formData.bedrooms && !isNaN(Number(formData.bedrooms)) ? Number(formData.bedrooms) : 0,
-        suites: formData.suites && !isNaN(Number(formData.suites)) ? Number(formData.suites) : 0,
-        banheiros: formData.bathrooms && !isNaN(Number(formData.bathrooms)) ? Number(formData.bathrooms) : 0,
-        vagas: formData.parkingSpaces && !isNaN(Number(formData.parkingSpaces)) ? Number(formData.parkingSpaces) : 0,
+        metragem_quadrada: parseNumeric(formData.squareFootage),
+        andar: Math.floor(parseNumeric(formData.floor)),
+        dormitorios: Math.floor(parseNumeric(formData.bedrooms)),
+        suites: Math.floor(parseNumeric(formData.suites)),
+        banheiros: Math.floor(parseNumeric(formData.bathrooms)),
+        vagas: Math.floor(parseNumeric(formData.parkingSpaces)),
         outros: formData.others,
         imovel_enviado: formData.propertySent,
         feedback: formData.feedback,
@@ -1781,7 +1815,7 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
 
       if (error) {
         console.error("Supabase Error Details:", JSON.stringify(error, null, 2));
-        alert(`Erro ao salvar: ${error.message || JSON.stringify(error)}`);
+        setError(`Erro no banco de dados: ${error.message || JSON.stringify(error)}`);
         throw error;
       }
       
@@ -1789,7 +1823,7 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
     } catch (error: any) {
       console.error("Error saving lead:", error);
       const errorMessage = error.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
-      alert(`Erro ao salvar: ${errorMessage}`);
+      setError(`Erro ao salvar: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -1895,6 +1929,12 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
         </AnimatePresence>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar">
+          {error && (
+            <div className="mx-10 mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold">
+              <ShieldAlert className="w-5 h-5 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
           <div className="p-10 grid grid-cols-1 md:grid-cols-3 gap-12">
             {/* Coluna 1: Perfil & Contato */}
             <div className="space-y-8">
@@ -1925,7 +1965,7 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Nome Completo *</label>
                   <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: João Silva" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1939,8 +1979,8 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">E-mail Principal</label>
-                  <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="email@exemplo.com" />
+                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">E-mail Principal *</label>
+                  <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="email@exemplo.com" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Rede Social</label>
@@ -1974,13 +2014,11 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
                     <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Status Lead</label>
                     <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none">
                       <option value="Novo">Novo</option>
-                      <option value="Aguardando">Aguardando</option>
+                      <option value="Ativo">Ativo</option>
                       <option value="Visita">Visita</option>
-                      <option value="Enviando novas opções aguardando retorno do comprador">Enviando novas opções aguardando retorno do comprador</option>
-                      <option value="Em Atendimento">Em Atendimento</option>
-                      <option value="Visita Agendada">Visita Agendada</option>
-                      <option value="Proposta">Proposta</option>
+                      <option value="Negociação">Negociação</option>
                       <option value="Fechado">Fechado</option>
+                      <option value="Parado">Parado</option>
                       <option value="Perdido">Perdido</option>
                     </select>
                   </div>
@@ -1992,8 +2030,8 @@ function LeadModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose:
                     <input type="text" value={formData.valueSought} onChange={(e) => setFormData({ ...formData, valueSought: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0,00" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Código do Imóvel</label>
-                    <input type="text" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: IMOB123" />
+                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Código do Imóvel *</label>
+                    <input required type="text" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: IMOB123" />
                   </div>
                 </div>
 

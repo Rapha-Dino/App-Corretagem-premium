@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useSupabase } from './SupabaseProvider';
 import { supabase } from './supabase';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, ShieldAlert, Mail, Lock, UserPlus } from 'lucide-react';
 
 export const SupabaseAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -73,7 +73,7 @@ export const SupabaseAuthGuard: React.FC<{ children: React.ReactNode }> = ({ chi
     setSuccess(null);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: window.location.origin,
       });
       if (error) throw error;
       setSuccess("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
@@ -204,6 +204,18 @@ export const SupabaseAuthGuard: React.FC<{ children: React.ReactNode }> = ({ chi
                       Atualizar Senha
                     </>
                   )}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsUpdatingPassword(false);
+                    setError(null);
+                    setSuccess(null);
+                    setPassword('');
+                  }}
+                  className="w-full text-center text-xs text-blue-900 font-bold hover:underline"
+                >
+                  Voltar para o Login
                 </button>
               </form>
             ) : (
