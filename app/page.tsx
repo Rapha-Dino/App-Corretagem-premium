@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSupabase } from '@/lib/SupabaseProvider';
 import { supabase } from '@/lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -121,6 +121,13 @@ const FunnelChart = ({ clients }: { clients: any[] }) => {
     { name: 'Venda', value: clients.filter(c => c.status === 'Fechado').length },
   ];
 
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <div className="h-64 w-full bg-slate-50 animate-pulse rounded-xl" />;
+
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -154,6 +161,11 @@ type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' 
 export default function Home() {
   const { user, profile, refreshProfile } = useSupabase();
   const [activeView, setActiveView] = useState<View>('dashboard');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
@@ -423,7 +435,11 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
     { name: 'Venda', value: clients.filter(c => c.status === 'Fechado').length, fill: '#ef4444' },
   ];
 
-  const recentLeads = [...clients].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5);
+  const recentLeads = [...clients].sort((a, b) => {
+    const timeA = Math.max(new Date(a.updated_at || a.created_at).getTime(), new Date(a.created_at).getTime());
+    const timeB = Math.max(new Date(b.updated_at || b.created_at).getTime(), new Date(b.created_at).getTime());
+    return timeB - timeA;
+  }).slice(0, 5);
 
   return (
     <motion.div 
@@ -448,7 +464,7 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
               </div>
               <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">{stat.trend}</span>
             </div>
-            <p className="text-sm font-medium text-slate-400">{stat.label}</p>
+            <p className="text-sm font-bold text-[#003366]">{stat.label}</p>
             <h4 className="text-3xl font-bold text-slate-900 mt-1">{stat.value}</h4>
           </motion.div>
         ))}
@@ -462,17 +478,19 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
             <button className="text-xs font-bold text-blue-600 hover:underline">Ver Detalhes</button>
           </div>
           <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={funnelData} layout="vertical" margin={{ left: 40, right: 40 }}>
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <Tooltip 
-                  cursor={{ fill: 'transparent' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+            {isMounted && (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={funnelData} layout="vertical" margin={{ left: 40, right: 40 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#003366' }} />
+                  <Tooltip 
+                    cursor={{ fill: 'transparent' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -480,22 +498,25 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
         <div className="col-span-12 lg:col-span-5 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900 mb-6">Atividade Recente</h3>
           <div className="space-y-6">
-            {recentLeads.map((client, i) => (
-              <div key={client.id} className="flex items-center gap-4 group cursor-pointer" onClick={() => onClientClick(client.id)}>
-                <img 
-                  src={getClientPhoto(client) || `https://picsum.photos/seed/${client.id}/100/100`} 
-                  alt="" 
-                  className="w-10 h-10 rounded-xl object-cover"
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{client.nome}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Novo lead registrado</p>
+            {recentLeads.map((client, i) => {
+              const isUpdate = client.updated_at && (new Date(client.updated_at).getTime() - new Date(client.created_at).getTime() > 60000);
+              return (
+                <div key={client.id} className="flex items-center gap-4 group cursor-pointer" onClick={() => onClientClick(client.id)}>
+                  <img 
+                    src={getClientPhoto(client) || `https://picsum.photos/seed/${client.id}/100/100`} 
+                    alt="" 
+                    className="w-10 h-10 rounded-xl object-cover"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{client.nome}</p>
+                    <p className="text-xs text-[#003366] font-bold mt-0.5">{isUpdate ? 'Lead atualizado' : 'Novo lead registrado'}</p>
+                  </div>
+                  <span className="text-[0.65rem] font-bold text-[#003366]">
+                    {format(new Date(client.updated_at || client.created_at), 'HH:mm')}
+                  </span>
                 </div>
-                <span className="text-[0.65rem] font-bold text-slate-300">
-                  {format(new Date(client.created_at), 'HH:mm')}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <button className="w-full mt-8 py-3 bg-slate-50 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-100 transition-all">
             Ver Todo Histórico
@@ -615,7 +636,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
     const excelDateToISO = (val: any) => {
       if (!val || String(val).trim() === '' || String(val).toLowerCase().includes('localizado')) return undefined;
       
-      let strVal = String(val).trim();
+      const strVal = String(val).trim();
       
       // Handle DD/MM/YYYY format
       const ddmmyyyy = strVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
@@ -730,7 +751,11 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
           
           if (normalizedRow.aniversario || normalizedRow.birthday) client.aniversario = excelDateToISO(normalizedRow.aniversario || normalizedRow.birthday);
           if (normalizedRow.dataentrada || normalizedRow.entrydate) client.data_entrada = excelDateToISO(normalizedRow.dataentrada || normalizedRow.entrydate);
-          if (normalizedRow.outros || normalizedRow.others || normalizedRow.obs || normalizedRow.observacoes) client.observacoes = normalizedRow.outros || normalizedRow.others || normalizedRow.obs || normalizedRow.observacoes;
+          
+          // Map observations to the correct database field 'outros'
+          if (normalizedRow.outros || normalizedRow.others || normalizedRow.obs || normalizedRow.observacoes || normalizedRow.observacao || normalizedRow.notascodigo) {
+            client.outros = normalizedRow.outros || normalizedRow.others || normalizedRow.obs || normalizedRow.observacoes || normalizedRow.observacao || normalizedRow.notascodigo;
+          }
           
           const valorRaw = normalizedRow.valorbuscado || normalizedRow.valor || normalizedRow.value || normalizedRow.orcamento || normalizedRow.budget || normalizedRow.valorbuscado;
           if (valorRaw) {
@@ -937,7 +962,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
           {filteredClients.length === 0 ? (
             <div className="p-20 text-center">
               <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-              <p className="text-slate-400 text-sm italic">Nenhum cliente encontrado com os filtros atuais.</p>
+              <p className="text-[#003366] text-sm italic font-bold">Nenhum cliente encontrado com os filtros atuais.</p>
             </div>
           ) : (
             filteredClients.map((client) => (
@@ -954,19 +979,19 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                   />
                   <div>
                     <p className="text-sm font-bold text-slate-900">{client.nome}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{client.email || 'Sem e-mail'}</p>
+                    <p className="text-xs text-[#003366] font-bold mt-0.5">{client.email || 'Sem e-mail'}</p>
                   </div>
                 </div>
                 <div className="col-span-2">
                   <p className="text-sm font-bold text-slate-900">{client.codigo || 'S/C'}</p>
-                  <p className="text-[0.65rem] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{client.v_l || 'N/A'}</p>
+                  <p className="text-[0.65rem] text-[#003366] font-bold uppercase tracking-widest mt-0.5">{client.v_l || 'N/A'}</p>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-sm text-slate-600 font-medium">{client.whatsapp || client.telefone || 'N/A'}</p>
+                  <p className="text-sm text-slate-900 font-bold">{client.whatsapp || client.telefone || 'N/A'}</p>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-sm text-slate-600 font-medium">{client.profissao || 'N/A'}</p>
-                  <p className="text-[0.65rem] text-slate-400 mt-0.5">{client.documento || ''}</p>
+                  <p className="text-sm text-slate-900 font-bold">{client.profissao || 'N/A'}</p>
+                  <p className="text-[0.65rem] text-[#003366] font-bold mt-0.5">{client.documento || ''}</p>
                 </div>
                 <div className="col-span-2 flex items-center justify-between pr-8">
                   <div>
@@ -979,7 +1004,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                       }`}></span>
                       <p className="text-xs font-bold text-slate-900">{client.status}</p>
                     </div>
-                    <p className="text-[0.65rem] text-slate-400 font-medium">
+                    <p className="text-[0.65rem] text-[#003366] font-bold">
                       {client.updated_at ? format(new Date(client.updated_at), 'dd/MM/yyyy') : 'Sem data'}
                     </p>
                   </div>
@@ -1017,11 +1042,11 @@ function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (
       <div className="flex justify-between items-end">
         <div>
           <h3 className="text-3xl font-black text-slate-900 tracking-tight">Pipeline de Vendas</h3>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Gestão de Fluxo de Trabalho</p>
+          <p className="text-[#003366] text-xs font-bold uppercase tracking-widest mt-1">Gestão de Fluxo de Trabalho</p>
         </div>
         <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm">
           <div className="text-right">
-            <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Valor Total</p>
+            <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest">Valor Total</p>
             <p className="text-lg font-black text-slate-900">
               R$ {clients.reduce((acc, c) => acc + (Number(c.valor_buscado) || 0), 0).toLocaleString()}
             </p>
@@ -1040,7 +1065,7 @@ function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (
                 <div className={`w-2 h-2 rounded-full ${stage.color}`} />
                 <span className="text-[0.7rem] font-black uppercase tracking-[0.15em] text-slate-900">{stage.label}</span>
               </div>
-              <span className="text-[0.65rem] font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg">
+              <span className="text-[0.65rem] font-bold text-[#003366] bg-slate-100 px-2.5 py-1 rounded-lg">
                 {clients.filter(c => c.status === stage.id).length}
               </span>
             </div>
@@ -1064,7 +1089,7 @@ function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (
                       />
                       <div>
                         <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors truncate w-32">{client.nome}</h4>
-                        <p className="text-[0.65rem] text-slate-400 font-medium">{client.tipo || 'N/A'}</p>
+                        <p className="text-[0.65rem] text-[#003366] font-bold">{client.tipo || 'N/A'}</p>
                       </div>
                     </div>
                     <button className="text-slate-300 hover:text-slate-600 transition-colors">
@@ -1075,15 +1100,15 @@ function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (
                   <div className="space-y-3">
                     <div className="flex justify-between items-end">
                       <div>
-                        <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Orçamento</p>
+                        <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Orçamento</p>
                         <p className="text-sm font-black text-slate-900">
                           R$ {client.valor_buscado ? (client.valor_buscado / 1000000).toFixed(1) + 'M' : 'N/A'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Último Contato</p>
-                        <div className="flex items-center gap-1.5 text-slate-600 font-bold text-[0.65rem]">
-                          <Clock className="w-3 h-3 text-slate-300" />
+                        <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Último Contato</p>
+                        <div className="flex items-center gap-1.5 text-slate-900 font-bold text-[0.65rem]">
+                          <Clock className="w-3 h-3 text-slate-400" />
                           {client.updated_at ? format(new Date(client.updated_at), 'dd MMM') : 'N/A'}
                         </div>
                       </div>
@@ -1251,7 +1276,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
       {/* Header */}
       <div className="flex justify-between items-center bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-6">
-          <button onClick={onBack} className="p-3 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-all">
+          <button onClick={onBack} className="p-3 bg-slate-50 text-slate-600 hover:text-slate-900 rounded-2xl transition-all">
             <Plus className="w-5 h-5 rotate-45" />
           </button>
           {getClientPhoto(client) && (
@@ -1263,42 +1288,42 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
           )}
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Lead ID: #{client.id.substring(0, 8)}</span>
+              <span className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest">Lead ID: #{client.id.substring(0, 8)}</span>
             </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">
               {client.nome}
               {client.aniversario && (
-                <span className="ml-3 text-xl font-bold text-slate-400">
+                <span className="ml-3 text-xl font-bold text-[#003366]">
                   ({calculateAge(client.aniversario)} anos)
                 </span>
               )}
             </h2>
             <div className="flex flex-wrap gap-6 mt-6">
               <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Venda / Locação</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Venda / Locação</p>
                 <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
                   {client.v_l || 'Venda'}
                 </div>
               </div>
               <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Status Lead</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Status Lead</p>
                 <div className={`px-10 py-3 rounded-2xl text-base font-black shadow-lg ${
                   client.status === 'Fechado' ? 'bg-emerald-500 text-white shadow-emerald-200' :
                   client.status === 'Visita' ? 'bg-blue-600 text-white shadow-blue-200' :
                   client.status === 'Negociação' ? 'bg-amber-500 text-white shadow-amber-200' :
-                  'bg-slate-100 text-slate-600'
+                  'bg-slate-100 text-[#003366]'
                 } text-center min-w-[160px]`}>
                   {client.status}
                 </div>
               </div>
               <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Código Imóvel</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Código Imóvel</p>
                 <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
                   {client.codigo || 'S/C'}
                 </div>
               </div>
               <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Budget</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Budget</p>
                 <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
                   R$ {client.valor_buscado?.toLocaleString() || '0'}
                 </div>
@@ -1338,7 +1363,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <Mail className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-1">E-mail Principal</p>
+                    <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">E-mail Principal</p>
                     <p className="text-sm font-bold text-slate-900">{client.email || 'Não informado'}</p>
                   </div>
                 </div>
@@ -1347,7 +1372,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-1">WhatsApp / Telefone</p>
+                    <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">WhatsApp / Telefone</p>
                     <p className="text-sm font-bold text-slate-900">{client.whatsapp || client.telefone || 'Não informado'}</p>
                   </div>
                 </div>
@@ -1356,7 +1381,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <Zap className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Rede Social</p>
+                    <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Rede Social</p>
                     <p className="text-sm font-bold text-slate-900">{client.rede_social || 'Não informado'}</p>
                   </div>
                 </div>
@@ -1367,10 +1392,10 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Data de Nascimento</p>
+                    <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Data de Nascimento</p>
                     <p className="text-sm font-bold text-slate-900">
                       {client.aniversario ? format(new Date(client.aniversario), 'dd/MM/yyyy') : 'Não informado'}
-                      {client.aniversario && <span className="ml-2 text-slate-400 font-medium">({calculateAge(client.aniversario)} anos)</span>}
+                      {client.aniversario && <span className="ml-2 text-[#003366] font-bold">({calculateAge(client.aniversario)} anos)</span>}
                     </p>
                   </div>
                 </div>
@@ -1379,7 +1404,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Documento (CPF/RG)</p>
+                    <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Documento (CPF/RG)</p>
                     <p className="text-sm font-bold text-slate-900">{client.documento || 'Não informado'}</p>
                   </div>
                 </div>
@@ -1388,7 +1413,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <Building2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Profissão / Cargo</p>
+                    <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Profissão / Cargo</p>
                     <p className="text-sm font-bold text-slate-900">{client.profissao || 'Não informado'}</p>
                   </div>
                 </div>
@@ -1406,53 +1431,53 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
             </div>
             <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-8">
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Budget Máximo</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Budget Máximo</p>
                 <p className="text-xl font-black text-slate-900">R$ {client.valor_buscado?.toLocaleString() || '0'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Código Imóvel</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Código Imóvel</p>
                 <p className="text-xl font-black text-slate-900">{client.codigo || 'N/A'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Área Desejada</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Área Desejada</p>
                 <p className="text-xl font-black text-slate-900">{client.metragem_quadrada || '0'} m²</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Andar</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Andar</p>
                 <p className="text-xl font-black text-slate-900">{client.andar || '0'}º</p>
               </div>
             </div>
             <div className="px-8 pb-8 grid grid-cols-2 md:grid-cols-4 gap-8">
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Dormitórios</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Dormitórios</p>
                 <p className="text-xl font-black text-slate-900">{client.dormitorios || '0'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Suítes</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Suítes</p>
                 <p className="text-xl font-black text-slate-900">{client.suites || '0'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Banheiros</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Banheiros</p>
                 <p className="text-xl font-black text-slate-900">{client.banheiros || '0'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Vagas</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Vagas</p>
                 <p className="text-xl font-black text-slate-900">{client.vagas || '0'}</p>
               </div>
             </div>
             <div className="px-8 pb-8 grid grid-cols-2 gap-8">
               <div>
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-3">Bairros de Interesse</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-3">Bairros de Interesse</p>
                 <div className="flex flex-wrap gap-2">
                   {client.bairros?.map((b: string, i: number) => (
-                    <span key={i} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-[0.65rem] font-bold rounded-lg border border-slate-200">
+                    <span key={i} className="px-3 py-1.5 bg-white text-[#003366] text-[0.65rem] font-bold rounded-lg border border-slate-200">
                       {b}
                     </span>
-                  )) || <span className="text-xs text-slate-400 italic">Nenhum bairro selecionado</span>}
+                  )) || <span className="text-xs text-[#003366] font-bold italic">Nenhum bairro selecionado</span>}
                 </div>
               </div>
               <div>
-                <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mb-3">Tipo de Imóvel</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-3">Tipo de Imóvel</p>
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
                     <MapPin className="w-4 h-4" />
@@ -1467,13 +1492,13 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
           <div className="grid grid-cols-2 gap-8">
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Imóveis Enviados</h3>
-              <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <p className="text-sm font-bold text-slate-900 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 {client.imovel_enviado || 'Nenhum imóvel enviado ainda.'}
               </p>
             </div>
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Feedback do Cliente</h3>
-              <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <p className="text-sm font-bold text-slate-900 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 {client.feedback || 'Nenhum feedback registrado.'}
               </p>
             </div>
@@ -1483,12 +1508,12 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
           <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-slate-900">Notas do Corretor</h3>
-              <div className="flex items-center gap-2 text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">
+              <div className="flex items-center gap-2 text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest">
                 <Clock className="w-3 h-3" />
                 Última Atualização: {client.updated_at ? format(new Date(client.updated_at), 'dd/MM/yyyy HH:mm') : 'N/A'}
               </div>
             </div>
-            <div className="p-6 bg-amber-50/50 rounded-2xl border border-amber-100 text-sm text-slate-700 leading-relaxed italic">
+            <div className="p-6 bg-amber-100 rounded-2xl border border-amber-200 text-sm font-bold text-[#003366] leading-relaxed italic">
               {client.outros ? getCleanOthers(client.outros) : 'Nenhuma nota registrada para este lead.'}
             </div>
           </div>
@@ -1496,7 +1521,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
 
         {/* Right Column: Interaction History */}
         <div className="col-span-12 lg:col-span-4 space-y-8">
-          <div className="bg-yellow-50/50 p-8 rounded-3xl border border-yellow-100 shadow-sm flex flex-col h-[800px]">
+          <div className="bg-amber-100 p-8 rounded-3xl border border-amber-200 shadow-sm flex flex-col h-[800px]">
             <div className="flex justify-between items-center mb-8">
               <h3 className="text-lg font-bold text-slate-900">Histórico de Conversa</h3>
               <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
@@ -1507,14 +1532,14 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
             <div className="flex-1 overflow-y-auto space-y-8 pr-2 custom-scrollbar">
               {client.historico_conversas?.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4">
-                    <Clock className="w-8 h-8 text-slate-200" />
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 border border-amber-200">
+                    <Clock className="w-8 h-8 text-amber-400" />
                   </div>
-                  <p className="text-xs text-slate-400 italic">Nenhuma interação registrada.</p>
+                  <p className="text-xs text-[#003366] font-bold italic">Nenhuma interação registrada.</p>
                 </div>
               ) : (
                 [...(client.historico_conversas || [])].reverse().map((int: any, i: number) => (
-                  <div key={i} className="relative pl-8 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-100 last:before:hidden group">
+                  <div key={i} className="relative pl-8 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-0.5 before:bg-amber-200 last:before:hidden group">
                     <div className="absolute left-[-4px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-500 border-4 border-white shadow-sm"></div>
                     <div className="flex justify-between items-center mb-2">
                       <div className="flex items-center gap-2">
@@ -1527,17 +1552,17 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
-                      <span className="text-[0.6rem] text-slate-400 font-bold">{format(new Date(int.date), 'dd MMM, HH:mm')}</span>
+                      <span className="text-[0.6rem] text-[#003366] font-extrabold">{format(new Date(int.date), 'dd MMM, HH:mm')}</span>
                     </div>
-                    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                      <p className="text-xs text-slate-600 leading-relaxed">{int.notes}</p>
+                    <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-sm">
+                      <p className="text-xs text-slate-900 font-medium leading-relaxed">{int.notes}</p>
                     </div>
                   </div>
                 ))
               )}
             </div>
 
-            <div className="mt-8 pt-8 border-t border-yellow-100">
+            <div className="mt-8 pt-8 border-t border-amber-200">
               <div className="relative">
                 <textarea 
                   value={newInteraction}
@@ -2152,35 +2177,35 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                     <Plus className="w-5 h-5" />
                   </div>
                 </div>
-                <p className="mt-4 text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Foto do Perfil</p>
+                <p className="mt-4 text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest">Foto do Perfil</p>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Nome Completo *</label>
-                  <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: João Silva" />
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Nome Completo *</label>
+                  <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="Ex: João Silva" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">WhatsApp</label>
-                    <input type="tel" value={formData.whatsapp} onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="(00) 00000-0000" />
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">WhatsApp</label>
+                    <input type="tel" value={formData.whatsapp} onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="(00) 00000-0000" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Telefone</label>
-                    <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="(00) 0000-0000" />
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Telefone</label>
+                    <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="(00) 0000-0000" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">E-mail Principal *</label>
-                  <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="email@exemplo.com" />
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">E-mail Principal *</label>
+                  <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="email@exemplo.com" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Rede Social</label>
-                  <input type="text" value={formData.socialMedia} onChange={(e) => setFormData({ ...formData, socialMedia: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="@usuario" />
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Rede Social</label>
+                  <input type="text" value={formData.socialMedia} onChange={(e) => setFormData({ ...formData, socialMedia: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="@usuario" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Profissão / Cargo</label>
-                  <input type="text" value={formData.profession} onChange={(e) => setFormData({ ...formData, profession: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: Diretor Executivo" />
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Profissão / Cargo</label>
+                  <input type="text" value={formData.profession} onChange={(e) => setFormData({ ...formData, profession: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="Ex: Diretor Executivo" />
                 </div>
               </div>
             </div>
@@ -2195,7 +2220,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Venda / Locação</label>
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Venda / Locação</label>
                     <select value={formData.vl} onChange={(e) => setFormData({ ...formData, vl: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none">
                       <option value="Venda">Venda</option>
                       <option value="Locação">Locação</option>
@@ -2203,7 +2228,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Status Lead</label>
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Status Lead</label>
                     <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none">
                       <option value="Novo">Novo</option>
                       <option value="Ativo">Ativo</option>
@@ -2218,17 +2243,17 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Budget Máximo (R$)</label>
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Budget Máximo (R$)</label>
                     <input type="text" value={formData.valueSought} onChange={(e) => setFormData({ ...formData, valueSought: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0,00" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Código do Imóvel *</label>
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Código do Imóvel *</label>
                     <input required type="text" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: IMOB123" />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Tipo de Imóvel</label>
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Tipo de Imóvel</label>
                   <select value={formData.propertyType} onChange={(e) => setFormData({ ...formData, propertyType: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none">
                     <option value="">Selecione o tipo</option>
                     <option value="Apartamento">Apartamento</option>
@@ -2249,11 +2274,11 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Área Mínima (m²)</label>
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Área Mínima (m²)</label>
                     <input type="text" value={formData.squareFootage} onChange={(e) => setFormData({ ...formData, squareFootage: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Andar</label>
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Andar</label>
                     <input type="text" value={formData.floor} onChange={(e) => setFormData({ ...formData, floor: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
                   </div>
                 </div>
@@ -2261,28 +2286,28 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Dormitórios</label>
+                      <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Dormitórios</label>
                       <input type="text" value={formData.bedrooms} onChange={(e) => setFormData({ ...formData, bedrooms: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Suítes</label>
+                      <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Suítes</label>
                       <input type="text" value={formData.suites} onChange={(e) => setFormData({ ...formData, suites: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Banheiros</label>
+                      <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Banheiros</label>
                       <input type="text" value={formData.bathrooms} onChange={(e) => setFormData({ ...formData, bathrooms: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Vagas de Garagem</label>
+                      <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Vagas de Garagem</label>
                       <input type="text" value={formData.parkingSpaces} onChange={(e) => setFormData({ ...formData, parkingSpaces: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Bairros de Interesse</label>
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Bairros de Interesse</label>
                   <div className="space-y-2">
                     <input type="text" value={formData.neighborhood1} onChange={(e) => setFormData({ ...formData, neighborhood1: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Bairro Principal" />
                     <input type="text" value={formData.neighborhood2} onChange={(e) => setFormData({ ...formData, neighborhood2: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Bairro Secundário" />

@@ -3,6 +3,7 @@ import './globals.css'; // Global styles
 import { SupabaseProvider } from '@/lib/SupabaseProvider';
 import { SupabaseAuthGuard } from '@/lib/SupabaseAuthGuard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorListener } from '@/components/ChunkErrorListener';
 
 export const metadata: Metadata = {
   title: 'Architectural Ledger CRM',
@@ -13,6 +14,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        <ChunkErrorListener />
         <ErrorBoundary>
           <SupabaseProvider>
             <SupabaseAuthGuard>
