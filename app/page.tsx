@@ -28,6 +28,7 @@ import {
   AlertCircle,
   ShieldAlert,
   Camera,
+  User,
   Trash2,
   Upload,
   Download,
@@ -104,7 +105,9 @@ const getCleanClient = (client: any) => {
 
 const getClientPhoto = (client: any) => {
   const clean = getCleanClient(client);
-  return clean?.foto_url || null;
+  const url = clean?.foto_url;
+  if (!url || url.includes('picsum.photos')) return null;
+  return url;
 };
 
 const getCleanOthers = (others: string | null) => {
@@ -161,11 +164,7 @@ type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' 
 export default function Home() {
   const { user, profile, refreshProfile } = useSupabase();
   const [activeView, setActiveView] = useState<View>('dashboard');
-  const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
@@ -256,6 +255,25 @@ export default function Home() {
       supabase.removeChannel(channel);
     };
   }, [user, refreshKey]);
+
+  useEffect(() => {
+    if (!user || clients.length === 0) return;
+    const cleanup = async () => {
+      const hallucinativeIds = clients
+        .filter(c => c.foto_url && (c.foto_url.includes('picsum.photos') || c.foto_url.includes('seed')))
+        .map(c => c.id);
+        
+      if (hallucinativeIds.length > 0) {
+        console.log(`[CLEANUP] Found ${hallucinativeIds.length} hallucinative photos. Cleaning up...`);
+        await supabase
+          .from('clients')
+          .update({ foto_url: null })
+          .in('id', hallucinativeIds);
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    cleanup();
+  }, [user, clients.length]);
 
   const handleLogout = () => supabase.auth.signOut();
 
@@ -367,17 +385,23 @@ export default function Home() {
                 <Bell className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex items-center gap-3 pl-6 border-l border-slate-100 group cursor-pointer">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-slate-900">{profile?.name || user?.email?.split('@')[0]}</p>
-                <p className="text-xs text-slate-400">Corretor</p>
+              <div className="flex items-center gap-3 pl-6 border-l border-slate-100 group cursor-pointer">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-bold text-slate-900">{profile?.name || user?.email?.split('@')[0]}</p>
+                  <p className="text-xs text-slate-400">Corretor</p>
+                </div>
+                {profile?.photo_url ? (
+                  <img 
+                    src={profile.photo_url} 
+                    alt="Profile" 
+                    className="w-10 h-10 rounded-full object-cover bg-slate-100"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                    <User className="w-5 h-5" />
+                  </div>
+                )}
               </div>
-              <img 
-                src={profile?.photo_url || `https://picsum.photos/seed/${user?.id}/100/100`} 
-                alt="Profile" 
-                className="w-10 h-10 rounded-full object-cover bg-slate-100"
-              />
-            </div>
           </div>
         </header>
 
@@ -422,6 +446,11 @@ export default function Home() {
 // --- Sub-Views ---
 
 function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onClientClick: (id: string) => void, onAddLead: () => void }) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const stats = [
     { label: 'Total de Clientes', value: clients.length, trend: '+12%', icon: Users, color: 'bg-blue-50 text-blue-600' },
     { label: 'Pipeline Ativo', value: clients.filter(c => c.status !== 'Fechado' && c.status !== 'Parado').length, trend: '+5%', icon: Target, color: 'bg-emerald-50 text-emerald-600' },
@@ -478,7 +507,7 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
             <button className="text-xs font-bold text-blue-600 hover:underline">Ver Detalhes</button>
           </div>
           <div className="h-[300px] w-full">
-            {isMounted && (
+            {mounted && (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnelData} layout="vertical" margin={{ left: 40, right: 40 }}>
                   <XAxis type="number" hide />
@@ -502,11 +531,17 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
               const isUpdate = client.updated_at && (new Date(client.updated_at).getTime() - new Date(client.created_at).getTime() > 60000);
               return (
                 <div key={client.id} className="flex items-center gap-4 group cursor-pointer" onClick={() => onClientClick(client.id)}>
-                  <img 
-                    src={getClientPhoto(client) || `https://picsum.photos/seed/${client.id}/100/100`} 
-                    alt="" 
-                    className="w-10 h-10 rounded-xl object-cover"
-                  />
+                  {getClientPhoto(client) ? (
+                    <img 
+                      src={getClientPhoto(client)!} 
+                      alt="" 
+                      className="w-10 h-10 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                      <User className="w-5 h-5" />
+                    </div>
+                  )}
                   <div className="flex-1">
                     <p className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{client.nome}</p>
                     <p className="text-xs text-[#003366] font-bold mt-0.5">{isUpdate ? 'Lead atualizado' : 'Novo lead registrado'}</p>
@@ -972,11 +1007,17 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                 className="grid grid-cols-12 px-8 py-6 items-center hover:bg-slate-50 transition-colors cursor-pointer group"
               >
                 <div className="col-span-3 flex items-center gap-4">
-                  <img 
-                    src={getClientPhoto(client) || `https://picsum.photos/seed/${client.id}/100/100`} 
-                    alt="" 
-                    className="w-12 h-12 rounded-2xl object-cover"
-                  />
+                  {getClientPhoto(client) ? (
+                    <img 
+                      src={getClientPhoto(client)!} 
+                      alt="" 
+                      className="w-12 h-12 rounded-2xl object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                      <User className="w-6 h-6" />
+                    </div>
+                  )}
                   <div>
                     <p className="text-sm font-bold text-slate-900">{client.nome}</p>
                     <p className="text-xs text-[#003366] font-bold mt-0.5">{client.email || 'Sem e-mail'}</p>
@@ -1082,11 +1123,17 @@ function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (
                   
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <img 
-                        src={getClientPhoto(client) || `https://picsum.photos/seed/${client.id}/100/100`} 
-                        alt="" 
-                        className="w-10 h-10 rounded-xl object-cover shadow-sm" 
-                      />
+                      {getClientPhoto(client) ? (
+                        <img 
+                          src={getClientPhoto(client)!} 
+                          alt="" 
+                          className="w-10 h-10 rounded-xl object-cover shadow-sm" 
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                          <User className="w-5 h-5" />
+                        </div>
+                      )}
                       <div>
                         <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors truncate w-32">{client.nome}</h4>
                         <p className="text-[0.65rem] text-[#003366] font-bold">{client.tipo || 'N/A'}</p>
@@ -1281,10 +1328,15 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
           </button>
           {getClientPhoto(client) && (
             <img 
-              src={getClientPhoto(client)} 
+              src={getClientPhoto(client)!} 
               alt={client.nome} 
               className="w-20 h-20 rounded-[1.5rem] object-cover border-2 border-slate-50 shadow-sm" 
             />
+          )}
+          {!getClientPhoto(client) && (
+            <div className="w-20 h-20 rounded-[1.5rem] bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100 shadow-sm">
+              <User className="w-10 h-10" />
+            </div>
           )}
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -1693,11 +1745,17 @@ function SettingsView({ profile }: { profile: any }) {
       <div className="bg-white p-8 rounded-2xl shadow-sm space-y-6">
         <div className="flex items-center gap-6">
           <div className="relative group">
-            <img 
-              src={photoUrl || `https://picsum.photos/seed/user/100/100`} 
-              alt="" 
-              className="w-24 h-24 rounded-full object-cover border-4 border-blue-50 transition-all group-hover:opacity-75" 
-            />
+            {photoUrl ? (
+              <img 
+                src={photoUrl} 
+                alt="" 
+                className="w-24 h-24 rounded-full object-cover border-4 border-blue-50 transition-all group-hover:opacity-75" 
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border-4 border-white shadow-xl">
+                <User className="w-12 h-12" />
+              </div>
+            )}
             <label className="absolute inset-0 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-all">
               <Camera className="w-8 h-8 text-white drop-shadow-md" />
               <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -1958,18 +2016,6 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
       setError("O nome é obrigatório.");
       return;
     }
-    if (!formData.phone.trim() && !formData.whatsapp.trim()) {
-      setError("Pelo menos um telefone ou WhatsApp é obrigatório.");
-      return;
-    }
-    if (!formData.email.trim()) {
-      setError("O e-mail é obrigatório.");
-      return;
-    }
-    if (!formData.code.trim()) {
-      setError("O código do imóvel é obrigatório.");
-      return;
-    }
 
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -2196,8 +2242,8 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">E-mail Principal *</label>
-                  <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="email@exemplo.com" />
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">E-mail Principal</label>
+                  <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400" placeholder="email@exemplo.com" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Rede Social</label>
@@ -2247,8 +2293,8 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                     <input type="text" value={formData.valueSought} onChange={(e) => setFormData({ ...formData, valueSought: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0,00" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Código do Imóvel *</label>
-                    <input required type="text" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: IMOB123" />
+                    <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Código do Imóvel</label>
+                    <input type="text" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: IMOB123" />
                   </div>
                 </div>
 
