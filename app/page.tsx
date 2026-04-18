@@ -164,6 +164,7 @@ type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' 
 export default function Home() {
   const { user, profile, refreshProfile } = useSupabase();
   const [activeView, setActiveView] = useState<View>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
@@ -277,15 +278,30 @@ export default function Home() {
 
   const handleLogout = () => supabase.auth.signOut();
 
+  const closeSidebar = () => setIsSidebarOpen(false);
+
   const openClientDetail = (id: string) => {
     setSelectedClientId(id);
     setActiveView('client-detail');
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
+    <div className="flex min-h-screen bg-[#f8fafc] text-slate-900 font-sans relative">
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[45] lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar Navigation */}
-      <aside className="fixed left-0 top-0 h-full w-72 bg-white border-r border-slate-100 z-50 flex flex-col">
+      <aside className={`fixed lg:sticky left-0 top-0 h-full w-72 bg-white border-r border-slate-100 z-50 flex flex-col transition-transform duration-300 lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         {dbError && (
           <div className="bg-red-600 text-white p-2 text-[0.6rem] font-bold text-center flex flex-col gap-1 items-center">
             <div className="animate-pulse">⚠️ ERRO DE BANCO: {dbError}</div>
@@ -321,6 +337,7 @@ export default function Home() {
               onClick={() => {
                 setActiveView(item.id as View);
                 setSelectedClientId(null);
+                closeSidebar();
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                 activeView === item.id
@@ -336,7 +353,10 @@ export default function Home() {
 
         <div className="px-6 py-10 space-y-2 border-t border-slate-50">
           <button 
-            onClick={() => setActiveView('settings')}
+            onClick={() => {
+              setActiveView('settings');
+              closeSidebar();
+            }}
             className={`w-full flex items-center gap-4 px-5 py-3 rounded-xl transition-all text-sm font-medium ${
               activeView === 'settings' 
                 ? 'text-blue-600 font-bold bg-blue-50' 
@@ -361,12 +381,18 @@ export default function Home() {
       </aside>
 
       {/* Main Content */}
-      <main className="ml-72 flex-1 flex flex-col min-h-screen">
+      <main className="flex-1 flex flex-col min-h-screen w-full overflow-hidden">
         {/* Header */}
-        <header className="sticky top-0 z-40 bg-white px-8 py-6 flex justify-between items-center border-b border-slate-100">
-          <div className="flex items-center gap-8">
+        <header className="sticky top-0 z-40 bg-white px-4 md:px-8 py-4 md:py-6 flex justify-between items-center border-b border-slate-100">
+          <div className="flex items-center gap-4 md:gap-8">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 lg:hidden text-slate-500 hover:bg-slate-50 rounded-lg transition-all"
+            >
+              <Grid className="w-6 h-6" />
+            </button>
             <div>
-              <h2 className="text-xl font-bold text-slate-900">
+              <h2 className="text-lg md:text-xl font-bold text-slate-900 truncate max-w-[200px] md:max-w-none">
                 {activeView === 'dashboard' ? 'Painel de Controle' : 
                  activeView === 'clients' ? 'Lista de Clientes' : 
                  activeView === 'pipeline' ? 'Pipeline de Vendas' : 
@@ -376,16 +402,16 @@ export default function Home() {
               </h2>
             </div>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <button className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative">
-                <MailIcon className="w-5 h-5" />
+          <div className="flex items-center gap-2 md:gap-6">
+            <div className="flex items-center gap-1 md:gap-3">
+              <button className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative">
+                <MailIcon className="w-4 h-4 md:w-5 md:h-5" />
               </button>
-              <button className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative">
-                <Bell className="w-5 h-5" />
+              <button className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative">
+                <Bell className="w-4 h-4 md:w-5 md:h-5" />
               </button>
             </div>
-              <div className="flex items-center gap-3 pl-6 border-l border-slate-100 group cursor-pointer">
+              <div className="flex items-center gap-2 md:gap-3 pl-2 md:pl-6 border-l border-slate-100 group cursor-pointer">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-bold text-slate-900">{profile?.name || user?.email?.split('@')[0]}</p>
                   <p className="text-xs text-slate-400">Corretor</p>
@@ -394,11 +420,11 @@ export default function Home() {
                   <img 
                     src={profile.photo_url} 
                     alt="Profile" 
-                    className="w-10 h-10 rounded-full object-cover bg-slate-100"
+                    className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover bg-slate-100"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
-                    <User className="w-5 h-5" />
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                    <User className="w-4 h-4 md:w-5 md:h-5" />
                   </div>
                 )}
               </div>
@@ -406,7 +432,7 @@ export default function Home() {
         </header>
 
         {/* View Content */}
-        <div className="p-8 flex-1">
+        <div className="px-4 md:p-8 flex-1 w-full max-w-7xl mx-auto py-6 md:py-8">
           <AnimatePresence mode="wait">
             {activeView === 'dashboard' && <Dashboard metrics={metrics} clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} />}
             {activeView === 'clients' && <ClientLedger clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} onRefresh={refreshClientsData} />}
@@ -475,38 +501,52 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-8"
+      className="space-y-6 md:space-y-8"
     >
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="text-2xl font-bold text-slate-900">Resumo de Performance</h3>
+          <p className="text-xs text-slate-400 mt-1">Acompanhe seus principais indicadores de venda.</p>
+        </div>
+        <button 
+          onClick={onAddLead}
+          className="w-full sm:w-auto px-6 py-3 bg-[#0f172a] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg"
+        >
+          <Plus className="w-4 h-4" />
+          Novo Lead
+        </button>
+      </div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {stats.map((stat, i) => (
           <motion.div 
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
+            className="bg-white p-5 md:p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
           >
             <div className="flex justify-between items-start mb-4">
-              <div className={`p-3 rounded-2xl ${stat.color} transition-transform group-hover:scale-110`}>
-                <stat.icon className="w-6 h-6" />
+              <div className={`p-2.5 md:p-3 rounded-2xl ${stat.color} transition-transform group-hover:scale-110`}>
+                <stat.icon className="w-5 h-5 md:w-6 md:h-6" />
               </div>
-              <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">{stat.trend}</span>
+              <span className="text-[0.65rem] md:text-xs font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">{stat.trend}</span>
             </div>
-            <p className="text-sm font-bold text-[#003366]">{stat.label}</p>
-            <h4 className="text-3xl font-bold text-slate-900 mt-1">{stat.value}</h4>
+            <p className="text-xs md:text-sm font-bold text-[#003366]">{stat.label}</p>
+            <h4 className="text-2xl md:text-3xl font-bold text-slate-900 mt-1">{stat.value}</h4>
           </motion.div>
         ))}
       </div>
 
       <div className="grid grid-cols-12 gap-8">
         {/* Funnel Chart */}
-        <div className="col-span-12 lg:col-span-7 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <div className="flex justify-between items-center mb-8">
+        <div className="col-span-12 lg:col-span-7 bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex justify-between items-center mb-6 md:mb-8">
             <h3 className="text-lg font-bold text-slate-900">Funil de Vendas</h3>
             <button className="text-xs font-bold text-blue-600 hover:underline">Ver Detalhes</button>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-[250px] md:h-[300px] w-full">
             {mounted && (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnelData} layout="vertical" margin={{ left: 40, right: 40 }}>
@@ -524,8 +564,8 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
         </div>
 
         {/* Recent Activity */}
-        <div className="col-span-12 lg:col-span-5 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Atividade Recente</h3>
+        <div className="col-span-12 lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-900 mb-4 md:mb-6">Atividade Recente</h3>
           <div className="space-y-6">
             {recentLeads.map((client, i) => {
               const isUpdate = client.updated_at && (new Date(client.updated_at).getTime() - new Date(client.created_at).getTime() > 60000);
@@ -561,9 +601,9 @@ function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onCl
 
       {/* Active Leads Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+        <div className="p-6 md:p-8 border-b border-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h3 className="text-lg font-bold text-slate-900">Leads Ativos no Portfólio</h3>
-          <button className="px-4 py-2 bg-slate-50 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100 transition-all">
+          <button className="w-full md:w-auto px-4 py-2 bg-slate-50 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100 transition-all">
             Filtrar Leads
           </button>
         </div>
@@ -983,9 +1023,10 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table / List */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="grid grid-cols-12 px-8 py-5 border-b border-slate-50 text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">
+        {/* Desktop Header */}
+        <div className="hidden md:grid grid-cols-12 px-8 py-5 border-b border-slate-50 text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">
           <div className="col-span-3">Cliente</div>
           <div className="col-span-2">Código / V/L</div>
           <div className="col-span-2">Telefone / WhatsApp</div>
@@ -993,6 +1034,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
           <div className="col-span-2">Status / Atualização</div>
           <div className="col-span-1"></div>
         </div>
+
         <div className="divide-y divide-slate-50">
           {filteredClients.length === 0 ? (
             <div className="p-20 text-center">
@@ -1001,59 +1043,113 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
             </div>
           ) : (
             filteredClients.map((client) => (
-              <div 
-                key={client.id} 
-                onClick={() => onClientClick(client.id)}
-                className="grid grid-cols-12 px-8 py-6 items-center hover:bg-slate-50 transition-colors cursor-pointer group"
-              >
-                <div className="col-span-3 flex items-center gap-4">
-                  {getClientPhoto(client) ? (
-                    <img 
-                      src={getClientPhoto(client)!} 
-                      alt="" 
-                      className="w-12 h-12 rounded-2xl object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
-                      <User className="w-6 h-6" />
+              <div key={client.id}>
+                {/* Desktop View */}
+                <div 
+                  onClick={() => onClientClick(client.id)}
+                  className="hidden md:grid grid-cols-12 px-8 py-6 items-center hover:bg-slate-50 transition-colors cursor-pointer group"
+                >
+                  <div className="col-span-3 flex items-center gap-4">
+                    {getClientPhoto(client) ? (
+                      <img 
+                        src={getClientPhoto(client)!} 
+                        alt="" 
+                        className="w-12 h-12 rounded-2xl object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                        <User className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{client.nome}</p>
+                      <p className="text-xs text-[#003366] font-bold mt-0.5">{client.email || 'Sem e-mail'}</p>
                     </div>
-                  )}
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">{client.nome}</p>
-                    <p className="text-xs text-[#003366] font-bold mt-0.5">{client.email || 'Sem e-mail'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm font-bold text-slate-900">{client.codigo || 'S/C'}</p>
+                    <p className="text-[0.65rem] text-[#003366] font-bold uppercase tracking-widest mt-0.5">{client.v_l || 'N/A'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm text-slate-900 font-bold">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm text-slate-900 font-bold">{client.profissao || 'N/A'}</p>
+                    <p className="text-[0.65rem] text-[#003366] font-bold mt-0.5">{client.documento || ''}</p>
+                  </div>
+                  <div className="col-span-2 flex items-center justify-between pr-8">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          client.status === 'Fechado' ? 'bg-emerald-500' :
+                          client.status === 'Visita' ? 'bg-blue-500' :
+                          client.status === 'Negociação' ? 'bg-amber-500' :
+                          'bg-slate-300'
+                        }`}></span>
+                        <p className="text-xs font-bold text-slate-900">{client.status}</p>
+                      </div>
+                      <p className="text-[0.65rem] text-[#003366] font-bold">
+                        {client.updated_at ? format(new Date(client.updated_at), 'dd/MM/yyyy') : 'Sem data'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <button className="p-2 text-slate-300 hover:text-slate-600 transition-colors">
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
-                <div className="col-span-2">
-                  <p className="text-sm font-bold text-slate-900">{client.codigo || 'S/C'}</p>
-                  <p className="text-[0.65rem] text-[#003366] font-bold uppercase tracking-widest mt-0.5">{client.v_l || 'N/A'}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-sm text-slate-900 font-bold">{client.whatsapp || client.telefone || 'N/A'}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-sm text-slate-900 font-bold">{client.profissao || 'N/A'}</p>
-                  <p className="text-[0.65rem] text-[#003366] font-bold mt-0.5">{client.documento || ''}</p>
-                </div>
-                <div className="col-span-2 flex items-center justify-between pr-8">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        client.status === 'Fechado' ? 'bg-emerald-500' :
-                        client.status === 'Visita' ? 'bg-blue-500' :
-                        client.status === 'Negociação' ? 'bg-amber-500' :
-                        'bg-slate-300'
-                      }`}></span>
-                      <p className="text-xs font-bold text-slate-900">{client.status}</p>
+
+                {/* Mobile Card View */}
+                <div 
+                  onClick={() => onClientClick(client.id)}
+                  className="md:hidden p-5 space-y-4 hover:bg-slate-50 transition-all cursor-pointer border-b last:border-b-0 border-slate-100"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {getClientPhoto(client) ? (
+                        <img 
+                          src={getClientPhoto(client)!} 
+                          alt="" 
+                          className="w-10 h-10 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                          <User className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{client.nome}</p>
+                        <p className="text-[0.65rem] text-[#003366] font-bold uppercase tracking-widest">{client.codigo || 'S/C'}</p>
+                      </div>
                     </div>
-                    <p className="text-[0.65rem] text-[#003366] font-bold">
-                      {client.updated_at ? format(new Date(client.updated_at), 'dd/MM/yyyy') : 'Sem data'}
+                    <div className={`px-3 py-1 rounded-full text-[0.6rem] font-bold uppercase tracking-widest ${
+                      client.status === 'Fechado' ? 'bg-emerald-100 text-emerald-600' :
+                      client.status === 'Visita' ? 'bg-blue-100 text-blue-600' :
+                      client.status === 'Negociação' ? 'bg-amber-100 text-amber-600' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
+                      {client.status}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">WhatsApp / Telefone</p>
+                      <p className="text-xs font-bold text-slate-700">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Tipo</p>
+                      <p className="text-xs font-bold text-slate-700">{client.v_l || 'N/A'}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-50">
+                    <p className="text-[0.65rem] text-slate-400">
+                      Atualizado em: <span className="font-bold text-[#003366]">{client.updated_at ? format(new Date(client.updated_at), 'dd/MM/yyyy') : '---'}</span>
                     </p>
+                    <ArrowRight className="w-4 h-4 text-blue-600" />
                   </div>
-                </div>
-                <div className="col-span-1 flex justify-end">
-                  <button className="p-2 text-slate-300 hover:text-slate-600 transition-colors">
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
             ))
@@ -1321,28 +1417,34 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
       className="max-w-7xl mx-auto space-y-8"
     >
       {/* Header */}
-      <div className="flex justify-between items-center bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-6">
-          <button onClick={onBack} className="p-3 bg-slate-50 text-slate-600 hover:text-slate-900 rounded-2xl transition-all">
-            <Plus className="w-5 h-5 rotate-45" />
-          </button>
-          {getClientPhoto(client) && (
-            <img 
-              src={getClientPhoto(client)!} 
-              alt={client.nome} 
-              className="w-20 h-20 rounded-[1.5rem] object-cover border-2 border-slate-50 shadow-sm" 
-            />
-          )}
-          {!getClientPhoto(client) && (
-            <div className="w-20 h-20 rounded-[1.5rem] bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100 shadow-sm">
-              <User className="w-10 h-10" />
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm gap-6 md:gap-0">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 w-full">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <button onClick={onBack} className="p-2.5 md:p-3 bg-slate-50 text-slate-600 hover:text-slate-900 rounded-2xl transition-all flex-shrink-0">
+              <Plus className="w-4 h-4 md:w-5 md:h-5 rotate-45" />
+            </button>
+            {getClientPhoto(client) ? (
+              <img 
+                src={getClientPhoto(client)!} 
+                alt={client.nome} 
+                className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-[1.5rem] object-cover border-2 border-slate-50 shadow-sm flex-shrink-0" 
+              />
+            ) : (
+              <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-[1.5rem] bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100 shadow-sm flex-shrink-0">
+                <User className="w-8 h-8 md:w-10 md:h-10" />
+              </div>
+            )}
+            <div className="md:hidden">
+              <span className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest">#{client.id.substring(0, 8)}</span>
+              <h2 className="text-xl font-black text-slate-900 leading-tight truncate">{client.nome}</h2>
             </div>
-          )}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+          </div>
+          
+          <div className="w-full">
+            <div className="hidden md:flex items-center gap-2 mb-1">
               <span className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest">Lead ID: #{client.id.substring(0, 8)}</span>
             </div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+            <h2 className="hidden md:block text-3xl font-black text-slate-900 tracking-tight">
               {client.nome}
               {client.aniversario && (
                 <span className="ml-3 text-xl font-bold text-[#003366]">
@@ -1350,50 +1452,50 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                 </span>
               )}
             </h2>
-            <div className="flex flex-wrap gap-6 mt-6">
-              <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Venda / Locação</p>
-                <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
+            <div className="flex flex-wrap gap-3 md:gap-6 mt-2 md:mt-6">
+              <div className="flex flex-col flex-1 min-w-[100px] md:min-w-0">
+                <p className="text-[0.6rem] md:text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1 md:mb-2">Venda / Locação</p>
+                <div className="px-3 md:px-6 py-2 md:py-3 bg-white border border-slate-100 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-900 shadow-sm text-center">
                   {client.v_l || 'Venda'}
                 </div>
               </div>
-              <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Status Lead</p>
-                <div className={`px-10 py-3 rounded-2xl text-base font-black shadow-lg ${
+              <div className="flex flex-col flex-1 min-w-[100px] md:min-w-0">
+                <p className="text-[0.6rem] md:text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1 md:mb-2">Status Lead</p>
+                <div className={`px-4 md:px-10 py-2 md:py-3 rounded-xl md:rounded-2xl text-xs md:text-base font-black shadow-lg ${
                   client.status === 'Fechado' ? 'bg-emerald-500 text-white shadow-emerald-200' :
                   client.status === 'Visita' ? 'bg-blue-600 text-white shadow-blue-200' :
                   client.status === 'Negociação' ? 'bg-amber-500 text-white shadow-amber-200' :
                   'bg-slate-100 text-[#003366]'
-                } text-center min-w-[160px]`}>
+                } text-center`}>
                   {client.status}
                 </div>
               </div>
-              <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Código Imóvel</p>
-                <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
+              <div className="flex flex-col flex-1 min-w-[100px] md:min-w-0">
+                <p className="text-[0.6rem] md:text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1 md:mb-2">Código Imóvel</p>
+                <div className="px-3 md:px-6 py-2 md:py-3 bg-white border border-slate-100 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-900 shadow-sm text-center">
                   {client.codigo || 'S/C'}
                 </div>
               </div>
-              <div className="flex flex-col">
-                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Budget</p>
-                <div className="px-6 py-3 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-900 shadow-sm min-w-[120px] text-center">
+              <div className="flex flex-col flex-1 min-w-[100px] md:min-w-0">
+                <p className="text-[0.6rem] md:text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1 md:mb-2 text-nowrap">Budget</p>
+                <div className="px-3 md:px-6 py-2 md:py-3 bg-white border border-slate-100 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-900 shadow-sm text-center">
                   R$ {client.valor_buscado?.toLocaleString() || '0'}
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-2 md:gap-4 w-full md:w-auto">
           <button 
             onClick={() => onEdit(client)}
-            className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-lg shadow-slate-900/20 hover:scale-[1.02] transition-all flex items-center gap-2"
+            className="flex-1 md:flex-none px-4 md:px-8 py-3 bg-slate-900 text-white rounded-xl md:rounded-2xl font-bold shadow-lg shadow-slate-900/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2 text-sm"
           >
             <FileText className="w-4 h-4" />
-            Editar Ficha
+            Editar
           </button>
           <button 
             onClick={() => setShowDeleteConfirm(true)}
-            className="p-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
+            className="p-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl md:rounded-2xl transition-all"
           >
             <Trash2 className="w-5 h-5" />
           </button>
@@ -1408,15 +1510,15 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
             <div className="p-8 border-b border-slate-50">
               <h3 className="text-lg font-bold text-slate-900">Informações de Contato</h3>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-slate-50">
-              <div className="p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-50">
+              <div className="p-6 md:p-8 space-y-6">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
                     <Mail className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="overflow-hidden">
                     <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">E-mail Principal</p>
-                    <p className="text-sm font-bold text-slate-900">{client.email || 'Não informado'}</p>
+                    <p className="text-sm font-bold text-slate-900 truncate">{client.email || 'Não informado'}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
@@ -1425,7 +1527,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                   </div>
                   <div>
                     <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">WhatsApp / Telefone</p>
-                    <p className="text-sm font-bold text-slate-900">{client.whatsapp || client.telefone || 'Não informado'}</p>
+                    <p className="text-sm font-bold text-slate-900">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'Não informado'}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
@@ -1438,7 +1540,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                   </div>
                 </div>
               </div>
-              <div className="p-8 space-y-6">
+              <div className="p-6 md:p-8 space-y-6">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-amber-50 rounded-xl text-amber-600">
                     <Calendar className="w-5 h-5" />
@@ -1541,16 +1643,16 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
           </div>
 
           {/* Feedback & Property Sent */}
-          <div className="grid grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Imóveis Enviados</h3>
-              <p className="text-sm font-bold text-slate-900 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <p className="text-sm font-bold text-slate-900 bg-slate-50 p-4 rounded-2xl border border-slate-100 min-h-[100px]">
                 {client.imovel_enviado || 'Nenhum imóvel enviado ainda.'}
               </p>
             </div>
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Feedback do Cliente</h3>
-              <p className="text-sm font-bold text-slate-900 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <p className="text-sm font-bold text-slate-900 bg-slate-50 p-4 rounded-2xl border border-slate-100 min-h-[100px]">
                 {client.feedback || 'Nenhum feedback registrado.'}
               </p>
             </div>
@@ -1573,7 +1675,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
 
         {/* Right Column: Interaction History */}
         <div className="col-span-12 lg:col-span-4 space-y-8">
-          <div className="bg-amber-100 p-8 rounded-3xl border border-amber-200 shadow-sm flex flex-col h-[800px]">
+          <div className="bg-amber-100 p-6 md:p-8 rounded-3xl border border-amber-200 shadow-sm flex flex-col h-[500px] md:h-[800px]">
             <div className="flex justify-between items-center mb-8">
               <h3 className="text-lg font-bold text-slate-900">Histórico de Conversa</h3>
               <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
@@ -2102,21 +2204,21 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
         className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header */}
-        <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-white">
-          <div>
+        <div className="p-6 md:p-10 border-b border-slate-50 flex justify-between items-center bg-white">
+          <div className="max-w-[80%]">
             <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Gestão de Leads</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+              <span className="text-[0.6rem] md:text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Gestão de Leads</span>
             </div>
-            <h3 className="text-3xl font-black text-slate-900 tracking-tight">
+            <h3 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight truncate">
               {initialData ? 'Editar Cadastro' : 'Novo Lead Executivo'}
             </h3>
           </div>
           <button 
             onClick={onClose} 
-            className="p-4 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-all"
+            className="p-3 md:p-4 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-all flex-shrink-0"
           >
-            <Plus className="w-6 h-6 rotate-45" />
+            <Plus className="w-5 h-5 md:w-6 md:h-6 rotate-45" />
           </button>
         </div>
 
@@ -2193,15 +2295,15 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar">
           {error && (
-            <div className="mx-10 mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold">
+            <div className="mx-6 md:mx-10 mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold">
               <ShieldAlert className="w-5 h-5 shrink-0" />
               <p>{error}</p>
             </div>
           )}
-          <div className="p-10 grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             {/* Coluna 1: Perfil & Contato */}
-            <div className="space-y-8">
-              <div className="flex flex-col items-center mb-10">
+            <div className="space-y-6 md:space-y-8">
+              <div className="flex flex-col items-center mb-6 md:mb-10">
                 <div className="relative group">
                   <div className="w-32 h-32 rounded-[2.5rem] bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-blue-400">
                     {formData.photoUrl ? (
@@ -2257,8 +2359,8 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
             </div>
 
             {/* Coluna 2: Preferências & Imóvel */}
-            <div className="space-y-8">
-              <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 space-y-6">
+            <div className="space-y-6 md:space-y-8">
+              <div className="p-6 md:p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 space-y-6">
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
                   Perfil de Busca
