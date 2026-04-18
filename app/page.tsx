@@ -37,7 +37,8 @@ import {
   MoreVertical,
   Mail as MailIcon,
   Grid,
-  Kanban
+  Kanban,
+  ArrowUpDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -679,6 +680,7 @@ function Dashboard({ metrics, clients, onClientClick, onAddLead }: {
 function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { clients: any[], onClientClick: (id: string) => void, onAddLead: () => void, onRefresh: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
+  const [sortOrder, setSortOrder] = useState<'recent' | 'az'>('recent');
   const [isImporting, setIsImporting] = useState(false);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -915,6 +917,12 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
     if (activeFilter === 'Negociação') return matchesSearch && client.status === 'Negociação';
     if (activeFilter === 'Venda') return matchesSearch && client.status === 'Fechado';
     return matchesSearch;
+  }).sort((a, b) => {
+    if (sortOrder === 'az') {
+      return a.nome.localeCompare(b.nome);
+    }
+    // Default: Recent (usually handled by the initial query, but let's ensure it)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   return (
@@ -1028,6 +1036,22 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
             className="w-full pl-12 pr-4 py-3 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-slate-200 transition-all"
           />
         </div>
+        
+        {/* Sort Select */}
+        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+          <div className="pl-3 pr-1">
+             <ArrowUpDown className="w-4 h-4 text-slate-400" />
+          </div>
+          <select 
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as 'recent' | 'az')}
+            className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none pr-4 cursor-pointer"
+          >
+            <option value="recent">Mais Recentes</option>
+            <option value="az">Ordem (A a Z)</option>
+          </select>
+        </div>
+
         <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto">
           {filters.map(filter => (
             <button
