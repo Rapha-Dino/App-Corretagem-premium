@@ -132,8 +132,8 @@ const FunnelChart = ({ clients }: { clients: any[] }) => {
   if (!mounted) return <div className="h-64 w-full bg-slate-50 animate-pulse rounded-xl" />;
 
   return (
-    <div className="h-64 w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-64 w-full relative">
+      <ResponsiveContainer width="100%" height="100%" id="funnel-chart-container" minHeight={100} debounce={50}>
         <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis 
@@ -563,9 +563,9 @@ function Dashboard({ metrics, clients, onClientClick, onAddLead }: {
             <h3 className="text-lg font-bold text-slate-900">Funil de Vendas</h3>
             <button className="text-xs font-bold text-blue-600 hover:underline">Ver Detalhes</button>
           </div>
-          <div className="h-[250px] md:h-[300px] w-full">
+          <div className="h-[250px] md:h-[300px] w-full relative">
             {mounted && (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" id="dashboard-funnel-container" minHeight={100} debounce={50}>
                 <BarChart data={funnelData} layout="vertical" margin={{ left: 40, right: 40 }}>
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#003366' }} />
