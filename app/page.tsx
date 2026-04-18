@@ -161,6 +161,18 @@ const FunnelChart = ({ clients }: { clients: any[] }) => {
 // Types
 type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' | 'portfolio' | 'financial' | 'analytics';
 
+// --- Helper Functions ---
+
+const cleanPhoneNumberForWhatsApp = (phone: string) => {
+  if (!phone) return "";
+  let cleaned = phone.replace(/\D/g, "");
+  // Se tiver 10 ou 11 dígitos (DDD + número), adiciona o código do Brasil (55)
+  if (cleaned.length === 10 || cleaned.length === 11) {
+    cleaned = "55" + cleaned;
+  }
+  return cleaned;
+};
+
 export default function Home() {
   const { user, profile, refreshProfile } = useSupabase();
   const [activeView, setActiveView] = useState<View>('dashboard');
@@ -471,16 +483,21 @@ export default function Home() {
 
 // --- Sub-Views ---
 
-function Dashboard({ clients, onClientClick, onAddLead }: { clients: any[], onClientClick: (id: string) => void, onAddLead: () => void }) {
+function Dashboard({ metrics, clients, onClientClick, onAddLead }: { 
+  metrics: { totalClients: number, activePipeline: number, salesThisMonth: number }, 
+  clients: any[], 
+  onClientClick: (id: string) => void, 
+  onAddLead: () => void 
+}) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
   const stats = [
-    { label: 'Total de Clientes', value: clients.length, trend: '+12%', icon: Users, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Pipeline Ativo', value: clients.filter(c => c.status !== 'Fechado' && c.status !== 'Parado').length, trend: '+5%', icon: Target, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Vendas este Mês', value: clients.filter(c => c.status === 'Fechado').length, trend: '+2%', icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
+    { label: 'Total de Clientes', value: metrics.totalClients, trend: '+12%', icon: Users, color: 'bg-blue-50 text-blue-600' },
+    { label: 'Pipeline Ativo', value: metrics.activePipeline, trend: '+5%', icon: Target, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Vendas este Mês', value: metrics.salesThisMonth, trend: '+2%', icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
   ];
 
   const funnelData = [
@@ -752,9 +769,11 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
 
     setIsImporting(true);
     
+    // Tenta ler como UTF-8 primeiro, se falhar ou tiver caracteres estranhos (comum em Excel BR) usar ISO-8859-1
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      encoding: "ISO-8859-1", // Padrão para Excel no Brasil
       delimiter: ";", // Support semicolon separated files
       complete: async (results) => {
         try {
@@ -764,6 +783,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
               Papa.parse(file, {
                 header: true,
                 skipEmptyLines: true,
+                encoding: "ISO-8859-1",
                 complete: async (res) => {
                   await processImport(res.data);
                 }
@@ -805,7 +825,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
           });
 
           const client: any = {
-            user_id: user.id,
+            user_id: user?.id,
             data_entrada: new Date().toISOString().split('T')[0],
             status: 'Ativo',
             bairros: [],
@@ -1071,7 +1091,21 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                     <p className="text-[0.65rem] text-[#003366] font-bold uppercase tracking-widest mt-0.5">{client.v_l || 'N/A'}</p>
                   </div>
                   <div className="col-span-2">
-                    <p className="text-sm text-slate-900 font-bold">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-slate-900 font-bold">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
+                      {(client.whatsapp || client.telefone) && (
+                        <a 
+                          href={`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp || client.telefone)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all"
+                          title="Conversar no WhatsApp"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                   <div className="col-span-2">
                     <p className="text-sm text-slate-900 font-bold">{client.profissao || 'N/A'}</p>
@@ -1136,7 +1170,20 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                   <div className="grid grid-cols-2 gap-4 pt-2">
                     <div>
                       <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">WhatsApp / Telefone</p>
-                      <p className="text-xs font-bold text-slate-700">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-700">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
+                        {(client.whatsapp || client.telefone) && (
+                          <a 
+                            href={`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp || client.telefone)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1 px-2 bg-emerald-50 text-emerald-600 rounded-lg"
+                          >
+                            <MessageCircle className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Tipo</p>
@@ -1527,7 +1574,20 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                   </div>
                   <div>
                     <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">WhatsApp / Telefone</p>
-                    <p className="text-sm font-bold text-slate-900">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'Não informado'}</p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm font-bold text-slate-900">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'Não informado'}</p>
+                      {(client.whatsapp || client.telefone) && (
+                        <a 
+                          href={`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp || client.telefone)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-2"
+                        >
+                          <MessageCircle className="w-4 h-4 fill-current" />
+                          <span className="text-[0.65rem] font-bold uppercase">WhatsApp</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
