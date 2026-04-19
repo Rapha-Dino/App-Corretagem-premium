@@ -38,7 +38,8 @@ import {
   Mail as MailIcon,
   Grid,
   Kanban,
-  ArrowUpDown
+  ArrowUpDown,
+  CreditCard
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -331,8 +332,8 @@ export default function Home() {
             <Building2 className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-none">Nexus Imobi</h1>
-            <p className="text-[0.6rem] uppercase font-bold tracking-widest text-slate-400 mt-1">Gestão Imobiliária</p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-none">Gestão de Carteira</h1>
+            <p className="text-[0.6rem] uppercase font-bold tracking-widest text-slate-400 mt-1">Inteligência Imobiliária</p>
           </div>
         </div>
 
@@ -497,7 +498,13 @@ function Dashboard({ metrics, clients, onClientClick, onAddLead }: {
 
   const stats = [
     { label: 'Total de Clientes', value: metrics.totalClients, trend: '+12%', icon: Users, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Pipeline Ativo', value: metrics.activePipeline, trend: '+5%', icon: Target, color: 'bg-emerald-50 text-emerald-600' },
+    { 
+      label: 'VGV', 
+      value: 'R$ ' + new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(metrics.activePipeline), 
+      trend: '+5%', 
+      icon: Target, 
+      color: 'bg-emerald-50 text-emerald-600' 
+    },
     { label: 'Vendas este Mês', value: metrics.salesThisMonth, trend: '+2%', icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
   ];
 
@@ -972,36 +979,6 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
             className="hidden" 
             accept=".csv"
           />
-          <div className="relative">
-            <button 
-              onClick={() => setShowConfirmClear(!showConfirmClear)}
-              disabled={isImporting}
-              className="flex-1 md:flex-none px-6 py-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-all disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" />
-              Limpar Tudo
-            </button>
-            
-            {showConfirmClear && (
-              <div className="absolute top-full mt-2 right-0 w-64 bg-white border border-slate-100 shadow-xl rounded-2xl p-4 z-50">
-                <p className="text-[0.7rem] font-bold text-slate-600 mb-3">Tem certeza? Isso apagará TODOS os clientes.</p>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={handleClearAll}
-                    className="flex-1 py-2 bg-red-500 text-white text-[0.65rem] font-bold rounded-lg hover:bg-red-600 transition-all"
-                  >
-                    Sim, Apagar
-                  </button>
-                  <button 
-                    onClick={() => setShowConfirmClear(false)}
-                    className="flex-1 py-2 bg-slate-100 text-slate-600 text-[0.65rem] font-bold rounded-lg hover:bg-slate-200 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
@@ -1542,9 +1519,9 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                 </div>
               </div>
               <div className="flex flex-col flex-1 min-w-[100px] md:min-w-0">
-                <p className="text-[0.6rem] md:text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1 md:mb-2">Código Imóvel</p>
+                <p className="text-[0.6rem] md:text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1 md:mb-2">Forma de Compra</p>
                 <div className="px-3 md:px-6 py-2 md:py-3 bg-white border border-slate-100 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-900 shadow-sm text-center">
-                  {client.codigo || 'S/C'}
+                  {client.forma_compra || 'Não inf.'}
                 </div>
               </div>
               <div className="flex flex-col flex-1 min-w-[100px] md:min-w-0">
@@ -1673,6 +1650,15 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                 <p className="text-xl font-black text-slate-900">R$ {client.valor_buscado?.toLocaleString() || '0'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Forma de Compra</p>
+                <div className="flex items-center gap-2">
+                   <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                      <CreditCard className="w-4 h-4 text-blue-600" />
+                   </div>
+                   <p className="text-sm font-bold text-slate-900">{client.forma_compra || 'Não inf.'}</p>
+                </div>
+              </div>
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
                 <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Código Imóvel</p>
                 <p className="text-xl font-black text-slate-900">{client.codigo || 'N/A'}</p>
               </div>
@@ -1705,13 +1691,13 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
             </div>
             <div className="px-8 pb-8 grid grid-cols-2 gap-8">
               <div>
-                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-3">Bairros de Interesse</p>
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-3">Locais de Interesse</p>
                 <div className="flex flex-wrap gap-2">
                   {client.bairros?.map((b: string, i: number) => (
                     <span key={i} className="px-3 py-1.5 bg-white text-[#003366] text-[0.65rem] font-bold rounded-lg border border-slate-200">
                       {b}
                     </span>
-                  )) || <span className="text-xs text-[#003366] font-bold italic">Nenhum bairro selecionado</span>}
+                  )) || <span className="text-xs text-[#003366] font-bold italic">Nenhum local selecionado</span>}
                 </div>
               </div>
               <div>
@@ -2081,6 +2067,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
     parkingSpaces: '',
     others: '',
     propertySent: '',
+    formaCompra: '',
     feedback: '',
     observations: '',
     contact: '',
@@ -2117,6 +2104,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
           parkingSpaces: cleanData.vagas?.toString() || '',
           others: cleanData.outros || '',
           propertySent: cleanData.imovel_enviado || '',
+          formaCompra: cleanData.forma_compra || '',
           feedback: cleanData.feedback || '',
           observations: cleanData.observacoes || '',
           contact: cleanData.contato || '',
@@ -2149,6 +2137,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
           parkingSpaces: '',
           others: '',
           propertySent: '',
+          formaCompra: '',
           feedback: '',
           observations: '',
           contact: '',
@@ -2235,6 +2224,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
         vagas: Math.floor(parseNumeric(formData.parkingSpaces)),
         outros: formData.others,
         imovel_enviado: formData.propertySent,
+        forma_compra: formData.formaCompra,
         feedback: formData.feedback,
         observacoes: formData.observations,
         contato: formData.contact,
@@ -2485,6 +2475,16 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Forma de compra</label>
+                  <select value={formData.formaCompra} onChange={(e) => setFormData({ ...formData, formaCompra: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none">
+                    <option value="">Selecione a forma</option>
+                    <option value="A vista">À vista</option>
+                    <option value="Financiamento">Financiamento</option>
+                    <option value="Permuta">Permuta</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Tipo de Imóvel</label>
                   <select value={formData.propertyType} onChange={(e) => setFormData({ ...formData, propertyType: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none">
                     <option value="">Selecione o tipo</option>
@@ -2539,11 +2539,11 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Bairros de Interesse</label>
+                  <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Locais de Interesse</label>
                   <div className="space-y-2">
-                    <input type="text" value={formData.neighborhood1} onChange={(e) => setFormData({ ...formData, neighborhood1: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Bairro Principal" />
-                    <input type="text" value={formData.neighborhood2} onChange={(e) => setFormData({ ...formData, neighborhood2: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Bairro Secundário" />
-                    <input type="text" value={formData.neighborhood3} onChange={(e) => setFormData({ ...formData, neighborhood3: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Bairro Terciário" />
+                    <input type="text" value={formData.neighborhood1} onChange={(e) => setFormData({ ...formData, neighborhood1: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Local Principal" />
+                    <input type="text" value={formData.neighborhood2} onChange={(e) => setFormData({ ...formData, neighborhood2: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Local Secundário" />
+                    <input type="text" value={formData.neighborhood3} onChange={(e) => setFormData({ ...formData, neighborhood3: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-3 px-5 text-xs font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Local Terciário" />
                   </div>
                 </div>
               </div>
