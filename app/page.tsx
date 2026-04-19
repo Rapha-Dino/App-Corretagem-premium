@@ -39,9 +39,26 @@ import {
   Grid,
   Kanban,
   ArrowUpDown,
-  CreditCard
+  CreditCard,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { 
+  format, 
+  addMonths, 
+  subMonths, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfWeek, 
+  endOfWeek, 
+  isSameMonth, 
+  isSameDay, 
+  addDays, 
+  eachDayOfInterval, 
+  isToday,
+  parseISO
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Cropper from 'react-easy-crop';
 import Papa from 'papaparse';
@@ -161,7 +178,7 @@ const FunnelChart = ({ clients }: { clients: any[] }) => {
 };
 
 // Types
-type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' | 'portfolio' | 'financial' | 'analytics';
+type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' | 'portfolio' | 'financial' | 'analytics' | 'calendar';
 
 // --- Helper Functions ---
 
@@ -184,6 +201,9 @@ export default function Home() {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [clients, setClients] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<any>(null);
   const [metrics, setMetrics] = useState({
     totalClients: 0,
     activePipeline: 0,
@@ -258,11 +278,32 @@ export default function Home() {
 
     fetchClients();
 
+    const fetchAppointments = async () => {
+      try {
+        if (!supabase) return;
+        const { data, error } = await supabase
+          .from('appointments')
+          .select('*, clients(nome)')
+          .eq('user_id', user.id)
+          .order('start_time', { ascending: true });
+        
+        if (error) throw error;
+        setAppointments(data || []);
+      } catch (err: any) {
+        console.error("Error fetching appointments:", err);
+      }
+    };
+
+    fetchAppointments();
+
     // Subscribe to changes
     const channel = supabase
-      .channel('clients_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, (payload) => {
-        fetchClients(); // Refresh on any change
+      .channel('db_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
+        fetchClients();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+        fetchAppointments();
       })
       .subscribe();
 
@@ -340,6 +381,7 @@ export default function Home() {
         <nav className="flex-1 px-4 space-y-1">
           {[
             { id: 'dashboard', label: 'Início', icon: '📊' },
+            { id: 'calendar', label: 'Calendário', icon: '📅' },
             { id: 'clients', label: 'Clientes', icon: '👥' },
             { id: 'pipeline', label: 'Vendas', icon: '📈' },
             { id: 'portfolio', label: 'Imóveis', icon: '🏠' },
@@ -410,6 +452,7 @@ export default function Home() {
                 {activeView === 'dashboard' ? 'Painel de Controle' : 
                  activeView === 'clients' ? 'Lista de Clientes' : 
                  activeView === 'pipeline' ? 'Pipeline de Vendas' : 
+                 activeView === 'calendar' ? 'Calendário de Atividades' :
                  activeView === 'portfolio' ? 'Portfólio de Imóveis' :
                  activeView === 'financial' ? 'Gestão Financeira' :
                  activeView === 'analytics' ? 'Relatórios e Análises' : 'Detalhes do Cliente'}
@@ -448,8 +491,15 @@ export default function Home() {
         {/* View Content */}
         <div className="px-4 md:p-8 flex-1 w-full max-w-7xl mx-auto py-6 md:py-8">
           <AnimatePresence mode="wait">
-            {activeView === 'dashboard' && <Dashboard metrics={metrics} clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} />}
+            {activeView === 'dashboard' && <Dashboard metrics={metrics} clients={clients} appointments={appointments} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} onSchedule={() => setActiveView('calendar')} />}
             {activeView === 'clients' && <ClientLedger clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} onRefresh={refreshClientsData} />}
+            {activeView === 'calendar' && (
+              <CalendarView 
+                appointments={appointments} 
+                onEdit={(app) => { setEditingAppointment(app); setIsScheduleModalOpen(true); }}
+                onAdd={() => { setEditingAppointment(null); setIsScheduleModalOpen(true); }}
+              />
+            )}
             {activeView === 'pipeline' && <Pipeline clients={clients} onClientClick={openClientDetail} />}
             {activeView === 'client-detail' && selectedClientId && (
               <ClientDetail 
@@ -479,17 +529,26 @@ export default function Home() {
         initialData={editingClient}
         onSuccess={refreshClientsData}
       />
+      <ScheduleModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => { setIsScheduleModalOpen(false); setEditingAppointment(null); }}
+        initialData={editingAppointment}
+        clients={clients}
+        onSuccess={refreshClientsData}
+      />
     </div>
   );
 }
 
 // --- Sub-Views ---
 
-function Dashboard({ metrics, clients, onClientClick, onAddLead }: { 
+function Dashboard({ metrics, clients, appointments, onClientClick, onAddLead, onSchedule }: { 
   metrics: { totalClients: number, activePipeline: number, salesThisMonth: number }, 
   clients: any[], 
+  appointments: any[],
   onClientClick: (id: string) => void, 
-  onAddLead: () => void 
+  onAddLead: () => void,
+  onSchedule: () => void
 }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -520,6 +579,10 @@ function Dashboard({ metrics, clients, onClientClick, onAddLead }: {
     const timeB = Math.max(new Date(b.updated_at || b.created_at).getTime(), new Date(b.created_at).getTime());
     return timeB - timeA;
   }).slice(0, 5);
+
+  const upcomingAppointments = appointments
+    .filter(app => new Date(app.start_time) >= new Date())
+    .slice(0, 5);
 
   return (
     <motion.div 
@@ -623,6 +686,50 @@ function Dashboard({ metrics, clients, onClientClick, onAddLead }: {
           </button>
         </div>
       </div>
+
+      {/* Upcoming Appointments Widget */}
+      {upcomingAppointments.length > 0 && (
+        <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-slate-900">Agenda: Próximos Compromissos</h3>
+            <button onClick={onSchedule} className="text-xs font-bold text-blue-600 hover:underline">Ver Agenda Completa</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingAppointments.map((app) => (
+              <div 
+                key={app.id} 
+                onClick={onSchedule}
+                className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className={`p-2 rounded-xl ${
+                    app.type === 'visita' ? 'bg-emerald-100 text-emerald-600' :
+                    app.type === 'negociação' ? 'bg-amber-100 text-amber-600' :
+                    'bg-blue-100 text-blue-600'
+                  }`}>
+                    {app.type === 'visita' ? <Building2 className="w-4 h-4" /> : 
+                     app.type === 'negociação' ? <Zap className="w-4 h-4" /> : 
+                     <Calendar className="w-4 h-4" />}
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(parseISO(app.start_time), 'dd MMM')}</span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">{app.title}</h4>
+                <div className="flex items-center gap-2 mt-2">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span className="text-[10px] font-bold text-[#003366]">{format(parseISO(app.start_time), 'HH:mm')}</span>
+                  {app.location && (
+                    <>
+                      <div className="w-1 h-1 rounded-full bg-slate-300" />
+                      <MapPin className="w-3 h-3 text-slate-400" />
+                      <span className="text-[10px] font-bold text-slate-500 truncate max-w-[80px]">{app.location}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active Leads Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -1650,6 +1757,10 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                 <p className="text-xl font-black text-slate-900">R$ {client.valor_buscado?.toLocaleString() || '0'}</p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Venda / Locação</p>
+                <p className="text-xl font-black text-slate-900">{client.v_l || 'Venda'}</p>
+              </div>
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
                 <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Forma de Compra</p>
                 <div className="flex items-center gap-2">
                    <div className="p-1.5 bg-white rounded-lg shadow-sm">
@@ -2613,6 +2724,412 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                   {initialData ? 'Salvar Alterações' : 'Finalizar Cadastro'}
                 </>
               )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+function CalendarView({ appointments, onEdit, onAdd }: { 
+  appointments: any[], 
+  onEdit: (appointment: any) => void,
+  onAdd: () => void
+}) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  
+  const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
+  const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
+
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(monthStart);
+  const startDate = startOfWeek(monthStart);
+  const endDate = endOfWeek(monthEnd);
+
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
+
+  const getDayAppointments = (day: Date) => {
+    return appointments.filter(app => isSameDay(parseISO(app.start_time), day));
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col">
+            <h3 className="text-3xl font-black text-slate-900 capitalize leading-none">
+              {format(currentDate, 'MMMM', { locale: ptBR })}
+            </h3>
+            <span className="text-sm font-bold text-blue-600 uppercase tracking-widest mt-1">
+              {format(currentDate, 'yyyy')}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={handlePrevMonth}
+              className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={handleNextMonth}
+              className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => {}} 
+            className="hidden md:flex items-center gap-2 px-6 py-3 bg-slate-50 text-slate-500 rounded-2xl border border-slate-100 text-xs font-bold hover:bg-slate-100 transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Sincronizar
+          </button>
+          <button 
+            onClick={onAdd}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+          >
+            <Plus className="w-5 h-5" />
+            Agendar Atividade
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-slate-50">
+          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+            <div key={day} className="py-4 text-center text-[0.6rem] font-black text-slate-300 uppercase tracking-widest">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {days.map((day, idx) => {
+            const dayApps = getDayAppointments(day);
+            const isTodayDay = isToday(day);
+            const isCurrentMonth = isSameMonth(day, monthStart);
+
+            return (
+              <div 
+                key={idx} 
+                className={`min-h-[140px] p-2 border-r border-b border-slate-50 last:border-r-0 relative transition-all hover:bg-slate-50 cursor-pointer group ${!isCurrentMonth ? 'bg-slate-50/30' : ''}`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`text-sm font-black w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
+                    isTodayDay 
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
+                      : isCurrentMonth ? 'text-slate-900' : 'text-slate-200'
+                  }`}>
+                    {format(day, 'd')}
+                  </span>
+                </div>
+                
+                <div className="space-y-1.5 overflow-hidden">
+                  {dayApps.map(app => (
+                    <button
+                      key={app.id}
+                      onClick={(e) => { e.stopPropagation(); onEdit(app); }}
+                      className={`w-full text-left p-2 rounded-xl border transition-all text-[0.65rem] truncate leading-tight flex flex-col gap-0.5 ${
+                        app.type === 'visita' ? 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100' :
+                        app.type === 'negociação' ? 'bg-amber-50 border-amber-100 text-amber-700 hover:bg-amber-100' :
+                        app.type === 'follow-up' ? 'bg-blue-50 border-blue-100 text-blue-700 hover:bg-blue-100' :
+                        'bg-slate-50 border-slate-100 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="font-bold">{format(parseISO(app.start_time), 'HH:mm')} - {app.title}</span>
+                      {app.clients?.nome && <span className="opacity-70 font-medium whitespace-nowrap">Cli: {app.clients.nome}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  initialData?: any, 
+  clients: any[],
+  onSuccess: () => void 
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    clientId: '',
+    type: 'visita',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: '09:00',
+    location: '',
+    description: '',
+    status: 'scheduled'
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        setFormData({
+          title: initialData.title || '',
+          clientId: initialData.client_id || '',
+          type: initialData.type || 'visita',
+          date: format(parseISO(initialData.start_time), 'yyyy-MM-dd'),
+          startTime: format(parseISO(initialData.start_time), 'HH:mm'),
+          location: initialData.location || '',
+          description: initialData.description || '',
+          status: initialData.status || 'scheduled'
+        });
+      } else {
+        setFormData({
+          title: '',
+          clientId: '',
+          type: 'visita',
+          date: format(new Date(), 'yyyy-MM-dd'),
+          startTime: '09:00',
+          location: '',
+          description: '',
+          status: 'scheduled'
+        });
+      }
+    }
+  }, [initialData, isOpen]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const startTime = `${formData.date}T${formData.startTime}:00Z`;
+      
+      const payload = {
+        user_id: user.id,
+        client_id: formData.clientId || null,
+        title: formData.title,
+        type: formData.type,
+        start_time: startTime,
+        location: formData.location,
+        description: formData.description,
+        status: formData.status,
+        updated_at: new Date().toISOString()
+      };
+
+      if (initialData) {
+        const { error } = await supabase
+          .from('appointments')
+          .update(payload)
+          .eq('id', initialData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('appointments')
+          .insert([payload]);
+        if (error) throw error;
+      }
+
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!initialData) return;
+    if (!confirm("Tem certeza que deseja cancelar este evento?")) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', initialData.id);
+      if (error) throw error;
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden"
+      >
+        <div className="p-10 border-b border-slate-50 flex justify-between items-center">
+          <div>
+            <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Agenda Profissional</span>
+            <h3 className="text-3xl font-black text-slate-900 tracking-tight">
+              {initialData ? 'Editar Agendamento' : 'Nova Atividade'}
+            </h3>
+          </div>
+          <button onClick={onClose} className="p-4 bg-slate-50 text-slate-400 rounded-2xl transition-all">
+            <Plus className="w-6 h-6 rotate-45" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-10 space-y-8">
+          {error && (
+            <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-bold flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5" />
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Assunto / Título</label>
+              <input 
+                required
+                type="text" 
+                value={formData.title} 
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                placeholder="Ex: Visita no Edifício Horizon"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Tipo de Atividade</label>
+                <select 
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none"
+                >
+                  <option value="visita">🏡 Visita</option>
+                  <option value="negociação">🤝 Negociação</option>
+                  <option value="follow-up">📞 Follow-up</option>
+                  <option value="anotação">📝 Anotação/Tarefa</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Vincular Cliente</label>
+                <select 
+                  value={formData.clientId}
+                  onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none"
+                >
+                  <option value="">Nenhum</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Data</label>
+                <input 
+                  required
+                  type="date" 
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Horário</label>
+                <input 
+                  required
+                  type="time" 
+                  value={formData.startTime}
+                  onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Local / Link</label>
+              <div className="relative">
+                <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
+                <input 
+                  type="text" 
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                  placeholder="Endereço ou link da reunião"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Notas / Detalhes</label>
+              <textarea 
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all min-h-[100px] resize-none"
+                placeholder="Observações adicionais para este compromisso..."
+              />
+            </div>
+            
+            <div className="flex gap-3">
+               <button 
+                type="button"
+                className="flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl text-[0.65rem] font-bold"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Google Calendar
+              </button>
+               <button 
+                type="button"
+                className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-[0.65rem] font-bold"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Outlook
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-slate-50 flex justify-end items-center gap-4">
+            {initialData && (
+              <button 
+                type="button"
+                onClick={handleDelete}
+                className="mr-auto px-6 py-4 text-red-400 font-bold hover:text-red-600 transition-all flex items-center gap-2"
+              >
+                <Trash2 className="w-5 h-5" />
+                Excluir
+              </button>
+            )}
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-8 py-4 text-slate-400 font-bold hover:text-slate-600 transition-all"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit"
+              disabled={loading}
+              className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:scale-[1.02] transition-all shadow-xl shadow-slate-900/20 disabled:opacity-50"
+            >
+              {loading ? 'Salvando...' : initialData ? 'Salvar Alterações' : 'Agendar'}
             </button>
           </div>
         </form>
