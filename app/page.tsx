@@ -6,9 +6,7 @@ import { useSupabase } from '@/lib/SupabaseProvider';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  LayoutDashboard, 
   Users, 
-  GitBranch, 
   Settings, 
   LogOut, 
   Search, 
@@ -42,7 +40,10 @@ import {
   CreditCard,
   RefreshCw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Filter,
+  BarChart3,
+  MousePointer2
 } from 'lucide-react';
 import { 
   format, 
@@ -54,7 +55,6 @@ import {
   endOfWeek, 
   isSameMonth, 
   isSameDay, 
-  addDays, 
   eachDayOfInterval, 
   isToday,
   parseISO
@@ -69,9 +69,24 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer, 
-  Cell 
+  ResponsiveContainer 
 } from 'recharts';
+import {
+  DndContext, 
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<string> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -135,48 +150,6 @@ const getCleanOthers = (others: string | null) => {
   return clean?.outros || 'Nenhuma nota registrada.';
 };
 
-const FunnelChart = ({ clients }: { clients: any[] }) => {
-  const data = [
-    { name: 'Lead', value: clients.filter(c => c.status === 'Ativo').length },
-    { name: 'Visita', value: clients.filter(c => c.status === 'Visita').length },
-    { name: 'Negociação', value: clients.filter(c => c.status === 'Negociação').length },
-    { name: 'Venda', value: clients.filter(c => c.status === 'Fechado').length },
-  ];
-
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return <div className="h-64 w-full bg-slate-50 animate-pulse rounded-xl" />;
-
-  return (
-    <div className="h-64 w-full relative">
-      <ResponsiveContainer width="100%" height="100%" id="funnel-chart-container" minHeight={100} debounce={50}>
-        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-          <XAxis 
-            dataKey="name" 
-            axisLine={false} 
-            tickLine={false} 
-            tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
-            dy={10}
-          />
-          <Tooltip 
-            cursor={{ fill: '#f8fafc' }}
-            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-          />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={40}>
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#0f172a' : '#cbd5e1'} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-};
-
 // Types
 type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' | 'portfolio' | 'financial' | 'analytics' | 'calendar';
 
@@ -193,7 +166,7 @@ const cleanPhoneNumberForWhatsApp = (phone: string) => {
 };
 
 export default function Home() {
-  const { user, profile, refreshProfile } = useSupabase();
+  const { user, profile } = useSupabase();
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -329,7 +302,7 @@ export default function Home() {
       }
     };
     cleanup();
-  }, [user, clients.length]);
+  }, [user, clients]);
 
   const handleLogout = () => supabase.auth.signOut();
 
@@ -338,6 +311,21 @@ export default function Home() {
   const openClientDetail = (id: string) => {
     setSelectedClientId(id);
     setActiveView('client-detail');
+  };
+
+  const updateClientStatus = async (clientId: string, newStatus: string) => {
+    try {
+      if (!supabase) return;
+      const { error } = await supabase
+        .from('clients')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', clientId);
+      
+      if (error) throw error;
+      refreshClientsData();
+    } catch (err) {
+      console.error("Error updating client status:", err);
+    }
   };
 
   return (
@@ -381,7 +369,7 @@ export default function Home() {
         <nav className="flex-1 px-4 space-y-1">
           {[
             { id: 'dashboard', label: 'Início', icon: '📊' },
-            { id: 'calendar', label: 'Calendário', icon: '📅' },
+            { id: 'calendar', label: 'Agendamentos', icon: '📅' },
             { id: 'clients', label: 'Clientes', icon: '👥' },
             { id: 'pipeline', label: 'Vendas', icon: '📈' },
             { id: 'portfolio', label: 'Imóveis', icon: '🏠' },
@@ -452,7 +440,7 @@ export default function Home() {
                 {activeView === 'dashboard' ? 'Painel de Controle' : 
                  activeView === 'clients' ? 'Lista de Clientes' : 
                  activeView === 'pipeline' ? 'Pipeline de Vendas' : 
-                 activeView === 'calendar' ? 'Calendário de Atividades' :
+                 activeView === 'calendar' ? 'Agendamentos' :
                  activeView === 'portfolio' ? 'Portfólio de Imóveis' :
                  activeView === 'financial' ? 'Gestão Financeira' :
                  activeView === 'analytics' ? 'Relatórios e Análises' : 'Detalhes do Cliente'}
@@ -500,7 +488,14 @@ export default function Home() {
                 onAdd={() => { setEditingAppointment(null); setIsScheduleModalOpen(true); }}
               />
             )}
-            {activeView === 'pipeline' && <Pipeline clients={clients} onClientClick={openClientDetail} />}
+            {activeView === 'pipeline' && (
+              <Pipeline 
+                clients={clients} 
+                onClientClick={openClientDetail} 
+                updateClientStatus={updateClientStatus}
+                onSchedule={() => setActiveView('calendar')}
+              />
+            )}
             {activeView === 'client-detail' && selectedClientId && (
               <ClientDetail 
                 clientId={selectedClientId} 
@@ -627,6 +622,54 @@ function Dashboard({ metrics, clients, appointments, onClientClick, onAddLead, o
         ))}
       </div>
 
+      {/* Upcoming Appointments Widget */}
+      {upcomingAppointments.length > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm"
+        >
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-slate-900">Agenda: Próximos Compromissos</h3>
+            <button onClick={onSchedule} className="text-xs font-bold text-blue-600 hover:underline">Ver Agenda Completa</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingAppointments.map((app) => (
+              <div 
+                key={app.id} 
+                onClick={onSchedule}
+                className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className={`p-2 rounded-xl ${
+                    app.type === 'visita' ? 'bg-emerald-100 text-emerald-600' :
+                    app.type === 'negociação' ? 'bg-amber-100 text-amber-600' :
+                    'bg-blue-100 text-blue-600'
+                  }`}>
+                    {app.type === 'visita' ? <Building2 className="w-4 h-4" /> : 
+                     app.type === 'negociação' ? <Zap className="w-4 h-4" /> : 
+                     <Calendar className="w-4 h-4" />}
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(parseISO(app.start_time), 'dd MMM')}</span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">{app.title}</h4>
+                <div className="flex items-center gap-2 mt-2">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span className="text-[10px] font-bold text-[#003366]">{format(parseISO(app.start_time), 'HH:mm')}</span>
+                  {app.location && (
+                    <>
+                      <div className="w-1 h-1 rounded-full bg-slate-300" />
+                      <MapPin className="w-3 h-3 text-slate-400" />
+                      <span className="text-[10px] font-bold text-slate-500 truncate max-w-[80px]">{app.location}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       <div className="grid grid-cols-12 gap-8">
         {/* Funnel Chart */}
         <div className="col-span-12 lg:col-span-7 bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
@@ -686,50 +729,6 @@ function Dashboard({ metrics, clients, appointments, onClientClick, onAddLead, o
           </button>
         </div>
       </div>
-
-      {/* Upcoming Appointments Widget */}
-      {upcomingAppointments.length > 0 && (
-        <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-slate-900">Agenda: Próximos Compromissos</h3>
-            <button onClick={onSchedule} className="text-xs font-bold text-blue-600 hover:underline">Ver Agenda Completa</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {upcomingAppointments.map((app) => (
-              <div 
-                key={app.id} 
-                onClick={onSchedule}
-                className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all cursor-pointer group"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div className={`p-2 rounded-xl ${
-                    app.type === 'visita' ? 'bg-emerald-100 text-emerald-600' :
-                    app.type === 'negociação' ? 'bg-amber-100 text-amber-600' :
-                    'bg-blue-100 text-blue-600'
-                  }`}>
-                    {app.type === 'visita' ? <Building2 className="w-4 h-4" /> : 
-                     app.type === 'negociação' ? <Zap className="w-4 h-4" /> : 
-                     <Calendar className="w-4 h-4" />}
-                  </div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(parseISO(app.start_time), 'dd MMM')}</span>
-                </div>
-                <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">{app.title}</h4>
-                <div className="flex items-center gap-2 mt-2">
-                  <Clock className="w-3 h-3 text-slate-400" />
-                  <span className="text-[10px] font-bold text-[#003366]">{format(parseISO(app.start_time), 'HH:mm')}</span>
-                  {app.location && (
-                    <>
-                      <div className="w-1 h-1 rounded-full bg-slate-300" />
-                      <MapPin className="w-3 h-3 text-slate-400" />
-                      <span className="text-[10px] font-bold text-slate-500 truncate max-w-[80px]">{app.location}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Active Leads Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -796,7 +795,6 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [sortOrder, setSortOrder] = useState<'recent' | 'az'>('recent');
   const [isImporting, setIsImporting] = useState(false);
-  const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useSupabase();
@@ -807,35 +805,6 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
       return () => clearTimeout(timer);
     }
   }, [notification]);
-
-  const handleClearAll = async () => {
-    if (!user) return;
-    
-    try {
-      setIsImporting(true);
-      const { error } = await supabase
-        .from('clients')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setNotification({
-        type: 'success',
-        message: "Todos os clientes foram excluídos com sucesso!"
-      });
-      setShowConfirmClear(false);
-      onRefresh();
-    } catch (err: any) {
-      console.error("Clear error:", err);
-      setNotification({
-        type: 'error',
-        message: "Erro ao excluir clientes: " + err.message
-      });
-    } finally {
-      setIsImporting(false);
-    }
-  };
 
   const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -865,7 +834,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
           if (!isNaN(date.getTime())) {
             return date.toISOString().split('T')[0];
           }
-        } catch (e) {
+        } catch {
           return undefined;
         }
       }
@@ -876,7 +845,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
         if (!isNaN(date.getTime()) && date.getFullYear() > 1900) {
           return date.toISOString().split('T')[0];
         }
-      } catch (e) {
+      } catch {
         // Ignore
       }
       
@@ -1315,130 +1284,456 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
   );
 }
 
-function Pipeline({ clients, onClientClick }: { clients: any[], onClientClick: (id: string) => void }) {
-  const stages = [
-    { id: 'Ativo', label: 'Novos Leads', color: 'bg-blue-500' },
-    { id: 'Em Atendimento', label: 'Em Atendimento', color: 'bg-amber-500' },
-    { id: 'Visita', label: 'Visitas Agendadas', color: 'bg-purple-500' },
-    { id: 'Negociação', label: 'Em Negociação', color: 'bg-emerald-500' },
-    { id: 'Fechado', label: 'Fechados', color: 'bg-slate-900' }
-  ];
-  
+function DraggableCard({ 
+  client, 
+  onClientClick, 
+  isStalled, 
+  isClosingSoon, 
+  onSchedule,
+  onFollowUp 
+}: { 
+  client: any, 
+  onClientClick: (id: string) => void, 
+  isStalled: boolean, 
+  isClosingSoon: boolean,
+  onSchedule: () => void,
+  onFollowUp: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: client.id,
+    data: {
+      type: 'client',
+      client
+    }
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : 1,
+  };
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.98 }}
-      className="space-y-10"
+    <div 
+      ref={setNodeRef}
+      style={style}
+      className="touch-none"
     >
-      <div className="flex justify-between items-end">
-        <div>
-          <h3 className="text-3xl font-black text-slate-900 tracking-tight">Pipeline de Vendas</h3>
-          <p className="text-[#003366] text-xs font-bold uppercase tracking-widest mt-1">Gestão de Fluxo de Trabalho</p>
+      <motion.div 
+        layoutId={client.id}
+        onClick={() => !isDragging && onClientClick(client.id)}
+        whileHover={{ scale: 1.02 }}
+        className={`bg-white rounded-2xl p-4 shadow-sm border transition-all cursor-pointer group relative overflow-hidden ${
+          isStalled ? 'border-red-100 bg-red-50/10' : 'border-slate-100'
+        } ${isDragging ? 'shadow-2xl border-blue-200' : ''}`}
+      >
+        {/* Drag Handle */}
+        <div {...attributes} {...listeners} className="absolute top-2 left-2 p-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity">
+          <Grid className="w-3 h-3" />
         </div>
-        <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="text-right">
-            <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest">Valor Total</p>
-            <p className="text-lg font-black text-slate-900">
-              R$ {clients.reduce((acc, c) => acc + (Number(c.valor_buscado) || 0), 0).toLocaleString()}
+
+        {isStalled && (
+          <div className="absolute top-0 right-0 p-1 bg-red-100 text-red-600 rounded-bl-xl">
+            <AlertCircle className="w-3 h-3 animate-pulse" />
+          </div>
+        )}
+        
+        <div className="flex items-center gap-3 mb-4 mt-2">
+          {getClientPhoto(client) ? (
+            <img 
+              src={getClientPhoto(client)!} 
+              alt="" 
+              className="w-10 h-10 rounded-xl object-cover shadow-sm" 
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+              <User className="w-5 h-5" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h4 className="font-bold text-slate-900 text-sm truncate group-hover:text-blue-600 transition-colors">{client.nome}</h4>
+            <div className="flex items-center gap-1">
+              <MapPin className="w-2.5 h-2.5 text-slate-400" />
+              <p className="text-[0.6rem] text-slate-400 font-medium truncate">{client.bairros?.[0] || 'Localização não inf.'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <p className="text-[0.55rem] font-bold text-[#003366] uppercase tracking-widest opacity-50">Expectativa</p>
+            <p className="text-sm font-black text-slate-900">
+              R$ {client.valor_buscado ? (client.valor_buscado / 1000).toFixed(0) + 'k' : '---'}
             </p>
           </div>
-          <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-blue-600" />
+          <div className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+            <p className="text-[0.55rem] font-bold text-slate-500 uppercase tracking-widest text-center">Tipo</p>
+            <p className="text-[0.65rem] font-black text-slate-900 text-center">{client.tipo || 'N/A'}</p>
           </div>
         </div>
-      </div>
 
-      <div className="flex gap-8 min-w-full items-start pb-10 overflow-x-auto no-scrollbar">
-        {stages.map((stage) => (
-          <div key={stage.id} className="flex flex-col gap-6 min-w-[320px] max-w-[320px]">
-            <div className="flex justify-between items-center px-2">
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                <span className="text-[0.7rem] font-black uppercase tracking-[0.15em] text-slate-900">{stage.label}</span>
+        <div className="flex items-center justify-between border-t border-slate-50 pt-3">
+          <div className="flex items-center gap-1">
+            <Clock className={`w-3 h-3 ${isStalled ? 'text-red-500' : 'text-slate-400'}`} />
+            <span className={`text-[0.6rem] font-bold ${isStalled ? 'text-red-600' : 'text-slate-500'}`}>
+              {isStalled ? 'Lead Parado' : format(new Date(client.updated_at || client.created_at), 'dd/MM')}
+            </span>
+          </div>
+          <div className="flex gap-1">
+            {isClosingSoon && (
+              <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Target className="w-3 h-3" />
               </div>
-              <span className="text-[0.65rem] font-bold text-[#003366] bg-slate-100 px-2.5 py-1 rounded-lg">
-                {clients.filter(c => c.status === stage.id).length}
-              </span>
-            </div>
-            
-            <div className="space-y-4 min-h-[500px] p-2 rounded-3xl bg-slate-50/50 border border-dashed border-slate-200/60">
-              {clients.filter(c => c.status === stage.id).map((client) => (
-                <motion.div 
-                  layoutId={client.id}
-                  key={client.id} 
-                  onClick={() => onClientClick(client.id)}
-                  className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden"
-                >
-                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      {getClientPhoto(client) ? (
-                        <img 
-                          src={getClientPhoto(client)!} 
-                          alt="" 
-                          className="w-10 h-10 rounded-xl object-cover shadow-sm" 
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
-                          <User className="w-5 h-5" />
-                        </div>
-                      )}
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors truncate w-32">{client.nome}</h4>
-                        <p className="text-[0.65rem] text-[#003366] font-bold">{client.tipo || 'N/A'}</p>
-                      </div>
-                    </div>
-                    <button className="text-slate-300 hover:text-slate-600 transition-colors">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Orçamento</p>
-                        <p className="text-sm font-black text-slate-900">
-                          R$ {client.valor_buscado ? (client.valor_buscado / 1000000).toFixed(1) + 'M' : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Último Contato</p>
-                        <div className="flex items-center gap-1.5 text-slate-900 font-bold text-[0.65rem]">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          {client.updated_at ? format(new Date(client.updated_at), 'dd MMM') : 'N/A'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-50 flex items-center justify-between">
-                      <div className="flex -space-x-2">
-                        {client.bairros?.slice(0, 2).map((b: string, i: number) => (
-                          <div key={i} className="px-2 py-0.5 bg-slate-50 border border-white rounded-md text-[0.55rem] font-bold text-slate-400 uppercase tracking-tighter">
-                            {b}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                        <ArrowRight className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-              
-              {clients.filter(c => c.status === stage.id).length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 opacity-20">
-                  <Plus className="w-8 h-8 text-slate-400 mb-2" />
-                  <p className="text-[0.65rem] font-bold uppercase tracking-widest">Etapa Vazia</p>
-                </div>
-              )}
+            )}
+            <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+              <MousePointer2 className="w-3 h-3" />
             </div>
           </div>
-        ))}
-      </div>
-    </motion.div>
+        </div>
+
+        {/* Automation Suggestions */}
+        <AnimatePresence>
+          {client.status === 'Visita' && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="mt-3 pt-3 border-t border-dashed border-purple-100"
+            >
+              <button 
+                onClick={(e) => { e.stopPropagation(); onSchedule(); }}
+                className="w-full py-2 bg-purple-50 text-purple-700 text-[0.6rem] font-black uppercase tracking-widest rounded-lg flex items-center justify-center gap-2 hover:bg-purple-100 transition-colors"
+              >
+                <Calendar className="w-3 h-3" /> Sugerir Visita
+              </button>
+            </motion.div>
+          )}
+          {isStalled && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="mt-3 pt-3 border-t border-dashed border-red-100"
+            >
+              <button 
+                onClick={(e) => { e.stopPropagation(); onFollowUp(); }}
+                className="w-full py-2 bg-red-50 text-red-700 text-[0.6rem] font-black uppercase tracking-widest rounded-lg flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+              >
+                <Phone className="w-3 h-3" /> Realizar Follow-up
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </div>
+  );
+}
+
+function Pipeline({ 
+  clients, 
+  onClientClick, 
+  updateClientStatus,
+  onSchedule 
+}: { 
+  clients: any[], 
+  onClientClick: (id: string) => void,
+  updateClientStatus: (id: string, status: string) => void,
+  onSchedule: () => void 
+}) {
+  const [funnelView, setFunnelView] = useState<'kanban' | 'analytics'>('kanban');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [stages, setStages] = useState([
+    { id: 'Ativo', label: 'Novos Leads', color: 'bg-blue-500' },
+    { id: 'Em Atendimento', label: 'Em Atendimento', color: 'bg-amber-500' },
+    { id: 'Visita', label: 'Visitas', color: 'bg-purple-500' },
+    { id: 'Negociação', label: 'Negociação', color: 'bg-emerald-500' },
+    { id: 'Fechado', label: 'Fechados', color: 'bg-slate-900' }
+  ]);
+  const [activeClient, setActiveClient] = useState<any>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const filteredClients = clients.filter(c => filterType === 'all' || c.tipo === filterType);
+
+  // Metrics calculation
+  const totalValue = filteredClients.reduce((acc, c) => acc + (Number(c.valor_buscado) || 0), 0);
+  const conversionRate = (clients.filter(c => c.status === 'Fechado').length / (clients.length || 1) * 100).toFixed(1);
+  const avgTime = 14; 
+  const stalledLeads = filteredClients.filter(c => {
+    if (!c.updated_at) return false;
+    const lastUpdate = new Date(c.updated_at);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return lastUpdate < thirtyDaysAgo;
+  });
+
+  const comparisonData = [
+    { name: 'Jan', atual: 4000, anterior: 2400 },
+    { name: 'Fev', atual: 3000, anterior: 1398 },
+    { name: 'Mar', atual: 2000, anterior: 9800 },
+    { name: 'Abr', atual: 2780, anterior: 3908 },
+  ];
+
+  const handleDragStart = (event: any) => {
+    const { active } = event;
+    const client = filteredClients.find(c => c.id === active.id);
+    setActiveClient(client);
+  };
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    setActiveClient(null);
+
+    if (!over) return;
+
+    const clientId = active.id;
+    const overId = over.id;
+
+    // Check if over is a stage id or a client id
+    let newStatus = overId;
+    if (!stages.find(s => s.id === overId)) {
+      const overClient = filteredClients.find(c => c.id === overId);
+      if (overClient) newStatus = overClient.status;
+    }
+
+    if (stages.find(s => s.id === newStatus)) {
+      const client = filteredClients.find(c => c.id === clientId);
+      if (client && client.status !== newStatus) {
+        updateClientStatus(clientId, newStatus);
+      }
+    }
+  };
+
+  const addStage = () => {
+    const name = window.prompt('Nome da nova etapa:');
+    if (name) {
+      setStages([...stages, { 
+        id: name, 
+        label: name, 
+        color: 'bg-slate-400' 
+      }]);
+    }
+  };
+
+  return (
+    <DndContext 
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-8"
+      >
+        {/* Header & Controls */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">Funil Avançado</h3>
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-[0.6rem] font-bold uppercase rounded-full tracking-widest">Premium</span>
+            </div>
+            <p className="text-[#003366] text-xs font-bold uppercase tracking-widest">Gestão de Performance e Conversão</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button 
+                onClick={() => setFunnelView('kanban')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${funnelView === 'kanban' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
+              >
+                <Kanban className="w-4 h-4" /> Kanban
+              </button>
+              <button 
+                onClick={() => setFunnelView('analytics')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${funnelView === 'analytics' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
+              >
+                <BarChart3 className="w-4 h-4" /> Insights
+              </button>
+            </div>
+
+            <div className="relative group">
+              <select 
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="appearance-none bg-white border border-slate-200 px-10 py-2.5 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
+              >
+                <option value="all">Filtro: Todos Imóveis</option>
+                <option value="Casa">Casas</option>
+                <option value="Apartamento">Apartamentos</option>
+                <option value="Terreno">Terrenos</option>
+              </select>
+              <Filter className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+        </div>
+
+        {funnelView === 'analytics' ? (
+          <div className="space-y-8">
+            {/* Analytics View */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Taxa de Conversão</p>
+                <h4 className="text-2xl font-black text-slate-900">{conversionRate}%</h4>
+                <p className="text-[0.65rem] text-emerald-500 font-bold mt-2">↑ 2.4% vs mês anterior</p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">VGV em Negociação</p>
+                <h4 className="text-2xl font-black text-slate-900">R$ {(totalValue / 1000000).toFixed(2)}M</h4>
+                <p className="text-[0.65rem] text-blue-500 font-bold mt-2">18 oportunidades ativas</p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Tempo Médio p/ Fechar</p>
+                <h4 className="text-2xl font-black text-slate-900">{avgTime} dias</h4>
+                <p className="text-[0.65rem] text-amber-500 font-bold mt-2">Ciclo de venda médio</p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Previsão de Fechamento</p>
+                <h4 className="text-2xl font-black text-emerald-600">R$ {(totalValue * 0.15 / 1000000).toFixed(2)}M</h4>
+                <p className="text-[0.65rem] text-slate-400 font-bold mt-2">Probabilidade ponderada (15%)</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-900 mb-8">Conversão Mês a Mês</h3>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={comparisonData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} />
+                      <YAxis hide />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Bar dataKey="atual" name="Este Mês" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
+                      <Bar dataKey="anterior" name="Mês Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-900 mb-8">Performance do Funil</h3>
+                <div className="space-y-6">
+                  {stages.map((s, i) => {
+                    const count = filteredClients.filter(c => c.status === s.id).length;
+                    const percentage = (count / (filteredClients.length || 1) * 100);
+                    return (
+                      <div key={s.id} className="space-y-2">
+                        <div className="flex justify-between items-center text-xs font-bold">
+                          <span className="text-slate-600 uppercase tracking-widest">{s.label}</span>
+                          <span className="text-slate-900">{count} leads</span>
+                        </div>
+                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${percentage}%` }}
+                            transition={{ delay: i * 0.1, duration: 1 }}
+                            className={`h-full ${s.color}`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-6 min-w-full items-start pb-10 overflow-x-auto no-scrollbar scroll-smooth">
+            {stages.map((stage) => {
+              const stageClients = filteredClients.filter(c => c.status === stage.id);
+              
+              return (
+                <div key={stage.id} className="flex flex-col gap-6 min-w-[300px] max-w-[300px]">
+                  <div className="flex justify-between items-center px-4 py-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${stage.color}`} />
+                      <span className="text-[0.7rem] font-black uppercase tracking-[0.1em] text-slate-900">{stage.label}</span>
+                    </div>
+                    <span className="text-[0.65rem] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">
+                      {stageClients.length}
+                    </span>
+                  </div>
+                  
+                  <SortableContext 
+                    id={stage.id}
+                    items={stageClients.map(c => c.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div 
+                      className="space-y-4 min-h-[600px] p-2 rounded-3xl bg-slate-100/30 border-2 border-dashed border-slate-200/50 transition-colors"
+                    >
+                      {stageClients.map((client) => {
+                        const isStalled = stalledLeads.some(s => s.id === client.id);
+                        const isClosingSoon = client.status === 'Negociação';
+
+                        return (
+                          <DraggableCard 
+                            key={client.id}
+                            client={client}
+                            onClientClick={onClientClick}
+                            isStalled={isStalled}
+                            isClosingSoon={isClosingSoon}
+                            onSchedule={onSchedule}
+                            onFollowUp={() => {
+                              const phone = cleanPhoneNumberForWhatsApp(client.telefone || '');
+                              if (phone) window.open(`https://wa.me/${phone}`, '_blank');
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </div>
+              );
+            })}
+            
+            <button 
+              onClick={addStage}
+              className="min-w-[300px] h-[700px] rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/30 transition-all group"
+            >
+              <Plus className="w-8 h-8 mb-4 group-hover:scale-110 transition-transform" />
+              <p className="text-xs font-bold uppercase tracking-widest">Nova Etapa</p>
+            </button>
+          </div>
+        )}
+
+        <DragOverlay>
+          {activeClient ? (
+            <div className="w-[280px]">
+              <div className="bg-white rounded-2xl p-4 shadow-2xl border-2 border-blue-400 opacity-90">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-slate-900 text-sm truncate">{activeClient.nome}</h4>
+                    <p className="text-[0.6rem] text-slate-400 font-medium truncate">{activeClient.tipo}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </motion.div>
+    </DndContext>
   );
 }
 
