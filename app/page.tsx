@@ -57,7 +57,9 @@ import {
   isSameDay, 
   eachDayOfInterval, 
   isToday,
-  parseISO
+  parseISO,
+  isBefore,
+  startOfToday
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Cropper from 'react-easy-crop';
@@ -134,7 +136,19 @@ const calculateAge = (birthday: string) => {
 
 const getCleanClient = (client: any) => {
   if (!client) return null;
-  return { ...client };
+  const clean = { ...client };
+  
+  // Extração inteligente do Andar se estiver em observações ocultas (fallback)
+  if (!clean.andar && clean.outros && clean.outros.includes('[Andar: ')) {
+    const match = clean.outros.match(/\[Andar: (.*?)\]/);
+    if (match) {
+      clean.andar = match[1];
+      // Limpa a tag do campo outros para não poluir a exibição
+      clean.outros = clean.outros.replace(/\[Andar: .*?\]\s*/, '');
+    }
+  }
+  
+  return clean;
 };
 
 const getClientPhoto = (client: any) => {
@@ -240,8 +254,9 @@ export default function Home() {
           }
         } else if (data) {
           console.log("[DIAGNOSTIC] Clients fetched successfully:", data.length);
-          setClients(data);
-          updateMetrics(data);
+          const cleanedClients = data.map(getCleanClient);
+          setClients(cleanedClients);
+          updateMetrics(cleanedClients);
           setDbError(null);
         }
       } catch (err: any) {
@@ -1130,12 +1145,28 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
         )}
       </AnimatePresence>
       {/* Sub-Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900">Lista de Clientes</h2>
-          <p className="text-xs text-slate-400 mt-1">Gerencie sua base de contatos e importe leads via Excel/CSV.</p>
+      <div className="flex flex-col lg:flex-row justify-between items-center gap-6 mb-10 mt-4">
+        {/* Lado Esquerdo: Título */}
+        <div className="lg:flex-1 w-full lg:w-auto text-center lg:text-left">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Lista de Clientes</h2>
+          <p className="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wider">Gestão de Carteira Executiva</p>
         </div>
-        <div className="flex gap-3 w-full md:w-auto">
+
+        {/* Centro: Novo Lead (Protagonista) */}
+        <div className="lg:flex-1 flex justify-center w-full lg:w-auto order-first lg:order-none">
+          <button 
+            onClick={onAddLead}
+            className="w-full lg:w-auto px-16 py-5 bg-[#0f172a] text-white rounded-[2rem] text-sm font-black flex items-center justify-center gap-4 hover:bg-slate-800 transition-all shadow-2xl shadow-slate-900/40 active:scale-95 group border-4 border-slate-50"
+          >
+            <div className="p-1.5 bg-white/10 rounded-xl group-hover:rotate-90 transition-transform duration-500">
+               <Plus className="w-5 h-5" />
+            </div>
+            <span>NOVO LEAD EXECUTIVO</span>
+          </button>
+        </div>
+
+        {/* Lado Direito: Ações Secundárias */}
+        <div className="lg:flex-1 flex items-center gap-2 w-full lg:w-auto justify-center lg:justify-end">
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -1143,25 +1174,21 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
             className="hidden" 
             accept=".csv"
           />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="flex-1 md:flex-none px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
-          >
-            {isImporting ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full" /> : <Upload className="w-4 h-4" />}
-            Importar CSV
-          </button>
-          <button className="flex-1 md:flex-none px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
-            <Download className="w-4 h-4" />
-            Exportar
-          </button>
-          <button 
-            onClick={onAddLead}
-            className="flex-1 md:flex-none px-6 py-3 bg-[#0f172a] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
-          >
-            <Plus className="w-4 h-4" />
-            Novo Lead
-          </button>
+          <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md">
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="px-4 py-2.5 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
+            >
+              {isImporting ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full" /> : <Upload className="w-3.5 h-3.5" />}
+              Importar
+            </button>
+            <div className="w-[1px] h-4 bg-slate-100 my-auto mx-1" />
+            <button className="px-4 py-2.5 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all">
+              <Download className="w-3.5 h-3.5" />
+              Exportar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2464,6 +2491,61 @@ function SettingsView({ profile }: { profile: any }) {
         </button>
 
         <div className="pt-8 border-t border-slate-100">
+          <h4 className="text-lg font-bold text-blue-900 mb-4 flex items-center gap-2">
+            <RefreshCw className="w-5 h-5" /> Integrações (Calendário)
+          </h4>
+          <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+            Conecte sua agenda com provedores externos para sincronizar compromissos automaticamente. 
+            <strong> Requer configuração de Cliente ID e Segredo nas variáveis de ambiente.</strong>
+          </p>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <span className="text-lg">G</span>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Google Calendar</p>
+                  <p className="text-[10px] text-slate-400 font-medium">Status: Não configurado</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => alert("Configure GOOGLE_CLIENT_ID nas configurações do projeto para habilitar.")}
+                className="px-4 py-2 bg-white border border-slate-200 text-[#003366] text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 transition-all"
+              >
+                Conectar
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <span className="text-lg text-blue-500">M</span>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Microsoft Outlook (Hotmail)</p>
+                  <p className="text-[10px] text-slate-400 font-medium">Status: Não configurado</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => alert("Configure MICROSOFT_CLIENT_ID nas configurações do projeto para habilitar.")}
+                className="px-4 py-2 bg-white border border-slate-200 text-[#003366] text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 transition-all"
+              >
+                Conectar
+              </button>
+            </div>
+            
+            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+              <p className="text-[10px] font-bold text-[#003366] uppercase tracking-[0.05em] mb-2">URLs de Callback (Redirecionamento):</p>
+              <code className="text-[9px] block bg-white p-2 border border-blue-100 rounded-lg break-all">
+                {typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'URL da aplicação'}
+              </code>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-8 border-t border-slate-100">
           <button 
             onClick={() => supabase.auth.signOut()}
             className="flex items-center gap-2 text-red-600 font-bold hover:text-red-700 transition-all"
@@ -2698,6 +2780,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
       }
       
       setLoading(true);
+      
       const payload: any = {
         user_id: user.id,
         nome: formData.name,
@@ -2714,6 +2797,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
         bairros: [formData.neighborhood1, formData.neighborhood2, formData.neighborhood3].filter(Boolean),
         tipo: formData.propertyType,
         metragem_quadrada: parseNumeric(formData.squareFootage),
+        // Tentamos salvar o texto diretamente. Se o banco for INTEGER, vai falhar e caímos no catch/fallback
         andar: formData.floor,
         dormitorios: Math.floor(parseNumeric(formData.bedrooms)),
         suites: Math.floor(parseNumeric(formData.suites)),
@@ -2733,25 +2817,43 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
       
       console.log("Saving client payload:", JSON.stringify(payload, null, 2));
 
-      let error;
+      let dbError;
       if (initialData) {
         const { error: updateError } = await supabase
           .from('clients')
           .update(payload)
           .eq('id', initialData.id);
-        error = updateError;
+        dbError = updateError;
       } else {
         payload.historico_conversas = [];
         const { error: insertError } = await supabase
           .from('clients')
           .insert([payload]);
-        error = insertError;
+        dbError = insertError;
       }
 
-      if (error) {
-        console.error("Supabase Error Details:", JSON.stringify(error, null, 2));
-        setError(`Erro no banco de dados: ${error.message || JSON.stringify(error)}`);
-        throw error;
+      // Fallback robusto se o banco ainda for do tipo INTEGER
+      if (dbError && dbError.message.includes('type integer')) {
+        console.log("Fallback: Tentando salvar como inteiro por restrição do banco...");
+        const isFloorNumeric = !isNaN(Number(formData.floor)) && formData.floor !== '';
+        
+        const fallbackPayload = {
+          ...payload,
+          andar: isFloorNumeric ? Number(formData.floor) : 0,
+          outros: !isFloorNumeric && formData.floor ? `[Andar: ${formData.floor}] ${formData.others || ''}` : formData.others
+        };
+        
+        if (initialData) {
+          const { error: retryError } = await supabase.from('clients').update(fallbackPayload).eq('id', initialData.id);
+          dbError = retryError;
+        } else {
+          const { error: retryError } = await supabase.from('clients').insert([fallbackPayload]);
+          dbError = retryError;
+        }
+      }
+
+      if (dbError) {
+        throw dbError;
       }
       
       onSuccess();
@@ -3124,6 +3226,7 @@ function CalendarView({ appointments, onEdit, onAdd }: {
   onAdd: () => void
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -3137,6 +3240,15 @@ function CalendarView({ appointments, onEdit, onAdd }: {
 
   const getDayAppointments = (day: Date) => {
     return appointments.filter(app => isSameDay(parseISO(app.start_time), day));
+  };
+
+  const handleSync = () => {
+    setIsSyncing(true);
+    // Simulating call to show something is happening
+    setTimeout(() => {
+      setIsSyncing(false);
+      alert("Para sincronizar com Google ou Hotmail, é necessário configurar as chaves de API nas Configurações. No momento, a integração está aguardando as credenciais CLIENT_ID e CLIENT_SECRET.");
+    }, 1500);
   };
 
   return (
@@ -3172,11 +3284,16 @@ function CalendarView({ appointments, onEdit, onAdd }: {
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={() => {}} 
-            className="hidden md:flex items-center gap-2 px-6 py-3 bg-slate-50 text-slate-500 rounded-2xl border border-slate-100 text-xs font-bold hover:bg-slate-100 transition-all"
+            onClick={handleSync} 
+            disabled={isSyncing}
+            className="hidden md:flex items-center gap-2 px-6 py-3 bg-slate-50 text-slate-500 rounded-2xl border border-slate-100 text-xs font-bold hover:bg-slate-100 transition-all disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4" />
-            Sincronizar
+            {isSyncing ? (
+              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar'}
           </button>
           <button 
             onClick={onAdd}
@@ -3189,9 +3306,9 @@ function CalendarView({ appointments, onEdit, onAdd }: {
       </div>
 
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-slate-50">
+        <div className="grid grid-cols-7 border-b border-slate-200">
           {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-            <div key={day} className="py-4 text-center text-[0.6rem] font-black text-slate-300 uppercase tracking-widest">
+            <div key={day} className="py-4 text-center text-[0.6rem] font-black text-[#003366] uppercase tracking-widest border-r border-slate-200 last:border-r-0">
               {day}
             </div>
           ))}
@@ -3201,11 +3318,12 @@ function CalendarView({ appointments, onEdit, onAdd }: {
             const dayApps = getDayAppointments(day);
             const isTodayDay = isToday(day);
             const isCurrentMonth = isSameMonth(day, monthStart);
+            const isPastDay = isBefore(day, startOfToday()) && isCurrentMonth;
 
             return (
               <div 
                 key={idx} 
-                className={`min-h-[140px] p-2 border-r border-b border-slate-50 last:border-r-0 relative transition-all hover:bg-slate-50 cursor-pointer group ${!isCurrentMonth ? 'bg-slate-50/30' : ''}`}
+                className={`min-h-[140px] p-2 border-r border-b border-slate-200 last:border-r-0 relative transition-all hover:bg-slate-50 cursor-pointer group ${!isCurrentMonth ? 'bg-slate-50/50' : ''} ${isPastDay ? 'opacity-70 grayscale-[0.3]' : ''}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-sm font-black w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
