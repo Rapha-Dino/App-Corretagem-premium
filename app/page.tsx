@@ -272,7 +272,7 @@ export default function Home() {
         if (!supabase) return;
         const { data, error } = await supabase
           .from('appointments')
-          .select('*, clients(nome)')
+          .select('*, clients(nome, telefone, whatsapp)')
           .eq('user_id', user.id)
           .order('start_time', { ascending: true });
         
@@ -468,7 +468,9 @@ export default function Home() {
                  activeView === 'calendar' ? 'Agendamentos' :
                  activeView === 'portfolio' ? 'Portfólio de Imóveis' :
                  activeView === 'financial' ? 'Gestão Financeira' :
-                 activeView === 'analytics' ? 'Relatórios e Análises' : 'Detalhes do Cliente'}
+                 activeView === 'analytics' ? 'Relatórios e Análises' : 
+                 activeView === 'settings' ? 'Usuário' : 
+                 'Detalhes do Cliente'}
               </h2>
             </div>
           </div>
@@ -529,7 +531,24 @@ export default function Home() {
                                     <p className="text-xs font-bold text-slate-900 truncate">{app.title}</p>
                                   </div>
                                   <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                                    <span>{app.clients?.nome || 'Sem cliente'}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span>{app.clients?.nome || 'Sem cliente'}</span>
+                                      {(app.clients?.whatsapp || app.clients?.telefone) && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const phone = cleanPhoneNumberForWhatsApp(app.clients.whatsapp || app.clients.telefone);
+                                            const date = format(parseISO(app.start_time), 'dd/MM/yyyy');
+                                            const time = format(parseISO(app.start_time), 'HH:mm');
+                                            const message = encodeURIComponent(`Olá ${app.clients.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${app.type || 'reunião'} no dia ${date} às ${time}. Podemos confirmar?`);
+                                            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                                          }}
+                                          className="text-emerald-500 hover:text-emerald-600 transition-colors"
+                                        >
+                                          <MessageCircle className="w-3 h-3 fill-current" />
+                                        </button>
+                                      )}
+                                    </div>
                                     <span>{format(parseISO(app.start_time), 'dd/MM HH:mm')}</span>
                                   </div>
                                 </div>
@@ -3347,7 +3366,25 @@ function CalendarView({ appointments, onEdit, onAdd }: {
                         'bg-slate-50 border-slate-100 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
-                      <span className="font-bold">{format(parseISO(app.start_time), 'HH:mm')} - {app.title}</span>
+                      <div className="flex justify-between items-start gap-1">
+                        <span className="font-bold">{format(parseISO(app.start_time), 'HH:mm')} - {app.title}</span>
+                        {(app.clients?.whatsapp || app.clients?.telefone) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const phone = cleanPhoneNumberForWhatsApp(app.clients.whatsapp || app.clients.telefone);
+                              const date = format(parseISO(app.start_time), 'dd/MM/yyyy');
+                              const time = format(parseISO(app.start_time), 'HH:mm');
+                              const message = encodeURIComponent(`Olá ${app.clients.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${app.type || 'reunião'} no dia ${date} às ${time}. Podemos confirmar?`);
+                              window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                            }}
+                            className="p-1 hover:bg-white/50 rounded-lg transition-all"
+                            title="Enviar confirmação via WhatsApp"
+                          >
+                            <MessageCircle className="w-3 h-3 fill-current" />
+                          </button>
+                        )}
+                      </div>
                       {app.clients?.nome && <span className="opacity-70 font-medium whitespace-nowrap">Cli: {app.clients.nome}</span>}
                     </button>
                   ))}
