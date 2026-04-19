@@ -533,21 +533,23 @@ export default function Home() {
                                   <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                                     <div className="flex items-center gap-2">
                                       <span>{app.clients?.nome || 'Sem cliente'}</span>
-                                      {(app.clients?.whatsapp || app.clients?.telefone) && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const phone = cleanPhoneNumberForWhatsApp(app.clients.whatsapp || app.clients.telefone);
-                                            const date = format(parseISO(app.start_time), 'dd/MM/yyyy');
-                                            const time = format(parseISO(app.start_time), 'HH:mm');
-                                            const message = encodeURIComponent(`Olá ${app.clients.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${app.type || 'reunião'} no dia ${date} às ${time}. Podemos confirmar?`);
-                                            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-                                          }}
-                                          className="text-emerald-500 hover:text-emerald-600 transition-colors"
-                                        >
-                                          <MessageCircle className="w-3 h-3 fill-current" />
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!app.clients?.whatsapp) {
+                                            alert("cliente sem whatsapp");
+                                            return;
+                                          }
+                                          const phone = cleanPhoneNumberForWhatsApp(app.clients.whatsapp);
+                                          const date = format(parseISO(app.start_time), 'dd/MM/yyyy');
+                                          const time = format(parseISO(app.start_time), 'HH:mm');
+                                          const message = encodeURIComponent(`Olá ${app.clients.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${app.type || 'reunião'} no dia ${date} às ${time}. Podemos confirmar?`);
+                                          window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                                        }}
+                                        className="text-emerald-500 hover:text-emerald-600 transition-colors"
+                                      >
+                                        <MessageCircle className="w-3 h-3 fill-current" />
+                                      </button>
                                     </div>
                                     <span>{format(parseISO(app.start_time), 'dd/MM HH:mm')}</span>
                                   </div>
@@ -1877,6 +1879,7 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isAddingInteraction, setIsAddingInteraction] = useState(false);
+  const [showZoomPhoto, setShowZoomPhoto] = useState(false);
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -2011,7 +2014,8 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
               <img 
                 src={getClientPhoto(client)!} 
                 alt={client.nome} 
-                className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-[1.5rem] object-cover border-2 border-slate-50 shadow-sm flex-shrink-0" 
+                onClick={() => setShowZoomPhoto(true)}
+                className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-[1.5rem] object-cover border-2 border-slate-50 shadow-sm flex-shrink-0 cursor-zoom-in hover:scale-105 transition-transform" 
               />
             ) : (
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-[1.5rem] bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100 shadow-sm flex-shrink-0">
@@ -2113,17 +2117,19 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
                     <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-1">WhatsApp / Telefone</p>
                     <div className="flex items-center gap-3">
                       <p className="text-sm font-bold text-slate-900">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'Não informado'}</p>
-                      {(client.whatsapp || client.telefone) && (
-                        <a 
-                          href={`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp || client.telefone)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-2"
-                        >
-                          <MessageCircle className="w-4 h-4 fill-current" />
-                          <span className="text-[0.65rem] font-bold uppercase">WhatsApp</span>
-                        </a>
-                      )}
+                      <button 
+                        onClick={() => {
+                          if (!client.whatsapp) {
+                            alert("cliente sem whatsapp");
+                            return;
+                          }
+                          window.open(`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp)}`, '_blank');
+                        }}
+                        className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-2"
+                      >
+                        <MessageCircle className="w-4 h-4 fill-current" />
+                        <span className="text-[0.65rem] font-bold uppercase">WhatsApp</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2388,6 +2394,39 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Zoom Photo Modal */}
+      <AnimatePresence>
+        {showZoomPhoto && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowZoomPhoto(false)}
+            className="fixed inset-0 z-[120] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-4 md:p-10 cursor-zoom-out"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-full max-h-full"
+            >
+              <img 
+                src={getClientPhoto(client)!} 
+                alt={client.nome}
+                className="max-w-[90vw] max-h-[85vh] rounded-[2rem] shadow-2xl border-4 border-white/10 object-contain"
+              />
+              <button 
+                onClick={() => setShowZoomPhoto(false)}
+                className="absolute top-4 right-4 p-3 bg-white/20 hover:bg-white/40 rounded-2xl text-white backdrop-blur-md transition-all shadow-lg"
+              >
+                <Plus className="w-6 h-6 rotate-45" />
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
@@ -3368,22 +3407,24 @@ function CalendarView({ appointments, onEdit, onAdd }: {
                     >
                       <div className="flex justify-between items-start gap-1">
                         <span className="font-bold">{format(parseISO(app.start_time), 'HH:mm')} - {app.title}</span>
-                        {(app.clients?.whatsapp || app.clients?.telefone) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const phone = cleanPhoneNumberForWhatsApp(app.clients.whatsapp || app.clients.telefone);
-                              const date = format(parseISO(app.start_time), 'dd/MM/yyyy');
-                              const time = format(parseISO(app.start_time), 'HH:mm');
-                              const message = encodeURIComponent(`Olá ${app.clients.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${app.type || 'reunião'} no dia ${date} às ${time}. Podemos confirmar?`);
-                              window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-                            }}
-                            className="p-1 hover:bg-white/50 rounded-lg transition-all"
-                            title="Enviar confirmação via WhatsApp"
-                          >
-                            <MessageCircle className="w-3 h-3 fill-current" />
-                          </button>
-                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!app.clients?.whatsapp) {
+                              alert("cliente sem whatsapp");
+                              return;
+                            }
+                            const phone = cleanPhoneNumberForWhatsApp(app.clients.whatsapp);
+                            const date = format(parseISO(app.start_time), 'dd/MM/yyyy');
+                            const time = format(parseISO(app.start_time), 'HH:mm');
+                            const message = encodeURIComponent(`Olá ${app.clients.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${app.type || 'reunião'} no dia ${date} às ${time}. Podemos confirmar?`);
+                            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                          }}
+                          className="p-1 hover:bg-white/50 rounded-lg transition-all"
+                          title="Enviar confirmação via WhatsApp"
+                        >
+                          <MessageCircle className="w-3 h-3 fill-current" />
+                        </button>
                       </div>
                       {app.clients?.nome && <span className="opacity-70 font-medium whitespace-nowrap">Cli: {app.clients.nome}</span>}
                     </button>
@@ -3455,7 +3496,7 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
 
-      const startTime = `${formData.date}T${formData.startTime}:00Z`;
+      const startTime = new Date(`${formData.date}T${formData.startTime}:00`).toISOString();
       
       const payload = {
         user_id: user.id,
@@ -3595,13 +3636,37 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
               </div>
               <div className="space-y-2">
                 <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Horário</label>
-                <input 
-                  required
-                  type="time" 
-                  value={formData.startTime}
-                  onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
-                />
+                <div className="flex gap-2">
+                  <select 
+                    value={formData.startTime.split(':')[0]}
+                    onChange={(e) => {
+                      const newHour = e.target.value;
+                      const minutes = formData.startTime.split(':')[1] || '00';
+                      setFormData({ ...formData, startTime: `${newHour}:${minutes}` });
+                    }}
+                    className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none text-center"
+                  >
+                    {Array.from({ length: 24 }).map((_, i) => {
+                      const h = i.toString().padStart(2, '0');
+                      return <option key={h} value={h}>{h}h</option>;
+                    })}
+                  </select>
+                  <div className="flex items-center text-slate-300 font-bold">:</div>
+                  <select 
+                    value={formData.startTime.split(':')[1]}
+                    onChange={(e) => {
+                      const newMinutes = e.target.value;
+                      const hour = formData.startTime.split(':')[0] || '09';
+                      setFormData({ ...formData, startTime: `${hour}:${newMinutes}` });
+                    }}
+                    className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all appearance-none text-center"
+                  >
+                    <option value="00">00</option>
+                    <option value="15">15</option>
+                    <option value="30">30</option>
+                    <option value="45">45</option>
+                  </select>
+                </div>
               </div>
             </div>
 
