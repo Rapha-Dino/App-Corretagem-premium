@@ -1,7 +1,7 @@
 // Force rebuild for Supabase integration
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSupabase } from '@/lib/SupabaseProvider';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -184,6 +184,7 @@ export default function Home() {
   });
   const [dbError, setDbError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const refreshClientsData = () => setRefreshKey(prev => prev + 1);
 
@@ -284,6 +285,15 @@ export default function Home() {
       supabase.removeChannel(channel);
     };
   }, [user, refreshKey]);
+
+  const notificationsAppointments = useMemo(() => {
+    const now = new Date();
+    const limit = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+    return appointments.filter(app => {
+      const start = new Date(app.start_time);
+      return start >= now && start <= limit;
+    });
+  }, [appointments]);
 
   useEffect(() => {
     if (!user || clients.length === 0) return;
@@ -448,15 +458,93 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2 md:gap-6">
-            <div className="flex items-center gap-1 md:gap-3">
+            <div className="flex items-center gap-1 md:gap-3 relative">
               <button className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative">
                 <MailIcon className="w-4 h-4 md:w-5 md:h-5" />
               </button>
-              <button className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative">
-                <Bell className="w-4 h-4 md:w-5 md:h-5" />
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all relative"
+                >
+                  <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                  {notificationsAppointments.length > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {isNotificationsOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsNotificationsOpen(false)}
+                      />
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                      >
+                        <div className="p-4 border-b border-slate-50 bg-slate-50/50">
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Notificações (72h)</h4>
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto">
+                          {notificationsAppointments.length > 0 ? (
+                            <div className="divide-y divide-slate-50">
+                              {notificationsAppointments.map((app) => (
+                                <div 
+                                  key={app.id} 
+                                  className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    setActiveView('calendar');
+                                    setIsNotificationsOpen(false);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3 mb-1">
+                                    <div className={`p-1.5 rounded-lg ${
+                                      app.type === 'visita' ? 'bg-emerald-100 text-emerald-600' :
+                                      app.type === 'negociação' ? 'bg-amber-100 text-amber-600' :
+                                      'bg-blue-100 text-blue-600'
+                                    }`}>
+                                      {app.type === 'visita' ? <Building2 className="w-3.5 h-3.5" /> : 
+                                       app.type === 'negociação' ? <Zap className="w-3.5 h-3.5" /> : 
+                                       <Calendar className="w-3.5 h-3.5" />}
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-900 truncate">{app.title}</p>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                    <span>{app.clients?.nome || 'Sem cliente'}</span>
+                                    <span>{format(parseISO(app.start_time), 'dd/MM HH:mm')}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center">
+                              <p className="text-xs text-slate-400 font-bold">Sem agendamentos próximos.</p>
+                            </div>
+                          )}
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setActiveView('calendar');
+                            setIsNotificationsOpen(false);
+                          }}
+                          className="w-full p-4 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:bg-blue-50 transition-colors border-t border-slate-50"
+                        >
+                          Ver agenda completa
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
-              <div className="flex items-center gap-2 md:gap-3 pl-2 md:pl-6 border-l border-slate-100 group cursor-pointer">
+              <div 
+                onClick={() => setActiveView('settings')}
+                className="flex items-center gap-2 md:gap-3 pl-2 md:pl-6 border-l border-slate-100 group cursor-pointer hover:bg-slate-50/50 transition-all rounded-r-xl"
+              >
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-bold text-slate-900">{profile?.name || user?.email?.split('@')[0]}</p>
                   <p className="text-xs text-slate-400">Corretor</p>
@@ -2074,7 +2162,10 @@ function ClientDetail({ clientId, onBack, onEdit, onDelete, onRefresh }: { clien
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
                 <p className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest mb-2">Andar</p>
-                <p className="text-xl font-black text-slate-900">{client.andar || '0'}º</p>
+                <p className="text-xl font-black text-slate-900">
+                  {client.andar || 'N/A'}
+                  {client.andar && !isNaN(Number(client.andar)) && 'º'}
+                </p>
               </div>
             </div>
             <div className="px-8 pb-8 grid grid-cols-2 md:grid-cols-4 gap-8">
@@ -2623,7 +2714,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
         bairros: [formData.neighborhood1, formData.neighborhood2, formData.neighborhood3].filter(Boolean),
         tipo: formData.propertyType,
         metragem_quadrada: parseNumeric(formData.squareFootage),
-        andar: Math.floor(parseNumeric(formData.floor)),
+        andar: formData.floor,
         dormitorios: Math.floor(parseNumeric(formData.bedrooms)),
         suites: Math.floor(parseNumeric(formData.suites)),
         banheiros: Math.floor(parseNumeric(formData.bathrooms)),
@@ -2917,7 +3008,7 @@ function LeadModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: boolea
                   </div>
                   <div className="space-y-2">
                     <label className="text-[0.65rem] font-bold text-[#003366] uppercase tracking-widest ml-1">Andar</label>
-                    <input type="text" value={formData.floor} onChange={(e) => setFormData({ ...formData, floor: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="0" />
+                    <input type="text" value={formData.floor} onChange={(e) => setFormData({ ...formData, floor: e.target.value })} className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="Ex: 5º ou Alto" />
                   </div>
                 </div>
 
