@@ -43,7 +43,15 @@ import {
   ChevronRight,
   Filter,
   BarChart3,
-  MousePointer2
+  MousePointer2,
+  Home,
+  Warehouse,
+  Trees,
+  ShoppingBag,
+  TrainFront,
+  Hospital,
+  Check,
+  Image as ImageIcon
 } from 'lucide-react';
 import { 
   format, 
@@ -64,6 +72,9 @@ import {
 import { ptBR } from 'date-fns/locale';
 import Cropper from 'react-easy-crop';
 import Papa from 'papaparse';
+import { PortfolioView } from '@/components/PortfolioView';
+import { MatchesView } from '@/components/MatchesView';
+import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { 
   BarChart, 
   Bar, 
@@ -165,7 +176,7 @@ const getCleanOthers = (others: string | null) => {
 };
 
 // Types
-type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' | 'portfolio' | 'financial' | 'analytics' | 'calendar';
+type View = 'dashboard' | 'clients' | 'pipeline' | 'settings' | 'client-detail' | 'portfolio' | 'financial' | 'analytics' | 'calendar' | 'matches';
 
 // --- Helper Functions ---
 
@@ -199,6 +210,7 @@ export default function Home() {
   const [dbError, setDbError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState<any>(null);
 
   const refreshClientsData = () => setRefreshKey(prev => prev + 1);
 
@@ -303,7 +315,7 @@ export default function Home() {
 
   const notificationsAppointments = useMemo(() => {
     const now = new Date();
-    const limit = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+    const limit = new Date(now.getTime() + 180 * 60 * 60 * 1000);
     return appointments.filter(app => {
       const start = new Date(app.start_time);
       return start >= now && start <= limit;
@@ -398,6 +410,7 @@ export default function Home() {
             { id: 'clients', label: 'Clientes', icon: '👥' },
             { id: 'pipeline', label: 'Vendas', icon: '📈' },
             { id: 'portfolio', label: 'Imóveis', icon: '🏠' },
+            { id: 'matches', label: 'Matches', icon: '🎯' },
             { id: 'financial', label: 'Financeiro', icon: '💰' },
             { id: 'analytics', label: 'Relatórios', icon: '📋' },
           ].map((item) => (
@@ -467,6 +480,7 @@ export default function Home() {
                  activeView === 'pipeline' ? 'Pipeline de Vendas' : 
                  activeView === 'calendar' ? 'Agendamentos' :
                  activeView === 'portfolio' ? 'Portfólio de Imóveis' :
+                 activeView === 'matches' ? 'Matches Inteligentes' :
                  activeView === 'financial' ? 'Gestão Financeira' :
                  activeView === 'analytics' ? 'Relatórios e Análises' : 
                  activeView === 'settings' ? 'Usuário' : 
@@ -504,7 +518,7 @@ export default function Home() {
                         className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
                       >
                         <div className="p-4 border-b border-slate-50 bg-slate-50/50">
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Notificações (72h)</h4>
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Notificações (180h)</h4>
                         </div>
                         <div className="max-h-[300px] overflow-y-auto">
                           {notificationsAppointments.length > 0 ? (
@@ -620,6 +634,17 @@ export default function Home() {
                 onSchedule={() => setActiveView('calendar')}
               />
             )}
+            {activeView === 'portfolio' && (
+              <PortfolioView 
+                onRefresh={refreshClientsData}
+              />
+            )}
+            {activeView === 'matches' && (
+              <MatchesView 
+                onClientClick={openClientDetail}
+                onPropertyClick={(prop) => setSelectedPropertyForDetail(prop)}
+              />
+            )}
             {activeView === 'client-detail' && selectedClientId && (
               <ClientDetail 
                 clientId={selectedClientId} 
@@ -630,7 +655,7 @@ export default function Home() {
               />
             )}
             {activeView === 'settings' && <SettingsView profile={profile} />}
-            {['portfolio', 'financial', 'analytics'].includes(activeView) && (
+            {['financial', 'analytics'].includes(activeView) && (
               <div className="flex flex-col items-center justify-center h-full text-slate-400">
                 <span className="text-6xl mb-4">🚧</span>
                 <h3 className="text-xl font-bold">Em breve</h3>
@@ -655,6 +680,20 @@ export default function Home() {
         clients={clients}
         onSuccess={refreshClientsData}
       />
+      
+      {selectedPropertyForDetail && (
+        <PropertyDetailModal 
+          property={selectedPropertyForDetail}
+          onClose={() => setSelectedPropertyForDetail(null)}
+          onEdit={() => {
+            // Se precisar editar, podemos levar para o portfolio ou abrir o modal de edição aqui
+            // Por simplicidade agora, apenas fecha e avisa
+            setActiveView('portfolio');
+            setSelectedPropertyForDetail(null);
+          }}
+          onRefresh={refreshClientsData}
+        />
+      )}
     </div>
   );
 }
@@ -1173,20 +1212,20 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
           <p className="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wider">Gestão de Carteira Executiva</p>
         </div>
 
-        {/* Centro: Novo Lead (Protagonista) */}
+        {/* Centro: Novo Lead (Menor e menos destacado) */}
         <div className="lg:flex-1 flex justify-center w-full lg:w-auto order-first lg:order-none">
           <button 
             onClick={onAddLead}
-            className="w-full lg:w-auto px-16 py-5 bg-[#0f172a] text-white rounded-[2rem] text-sm font-black flex items-center justify-center gap-4 hover:bg-slate-800 transition-all shadow-2xl shadow-slate-900/40 active:scale-95 group border-4 border-slate-50"
+            className="w-full lg:w-auto px-8 py-3 bg-[#0f172a] text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95 group border-2 border-slate-100/50"
           >
-            <div className="p-1.5 bg-white/10 rounded-xl group-hover:rotate-90 transition-transform duration-500">
-               <Plus className="w-5 h-5" />
+            <div className="p-1 bg-white/10 rounded-lg group-hover:rotate-90 transition-transform duration-500">
+               <Plus className="w-4 h-4" />
             </div>
             <span>NOVO LEAD EXECUTIVO</span>
           </button>
         </div>
 
-        {/* Lado Direito: Ações Secundárias */}
+        {/* Lado Direito: Ações Secundárias (Menores) */}
         <div className="lg:flex-1 flex items-center gap-2 w-full lg:w-auto justify-center lg:justify-end">
           <input 
             type="file" 
@@ -1195,18 +1234,18 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
             className="hidden" 
             accept=".csv"
           />
-          <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md">
+          <div className="flex bg-white p-0.5 rounded-xl border border-slate-100 shadow-sm transition-all">
             <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={isImporting}
-              className="px-4 py-2.5 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
+              className="px-3 py-1.5 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-50 transition-all disabled:opacity-50"
             >
-              {isImporting ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full" /> : <Upload className="w-3.5 h-3.5" />}
+              {isImporting ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-2.5 h-2.5 border-2 border-slate-300 border-t-transparent rounded-full" /> : <Upload className="w-3 h-3" />}
               Importar
             </button>
-            <div className="w-[1px] h-4 bg-slate-100 my-auto mx-1" />
-            <button className="px-4 py-2.5 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all">
-              <Download className="w-3.5 h-3.5" />
+            <div className="w-[1px] h-3 bg-slate-50 my-auto mx-0.5" />
+            <button className="px-3 py-1.5 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-50 transition-all">
+              <Download className="w-3 h-3" />
               Exportar
             </button>
           </div>
@@ -1306,18 +1345,20 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                   <div className="col-span-2">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-slate-900 font-bold">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
-                      {(client.whatsapp || client.telefone) && (
-                        <a 
-                          href={`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp || client.telefone)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all"
-                          title="Conversar no WhatsApp"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                        </a>
-                      )}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!client.whatsapp) {
+                            alert("cliente sem whatsapp");
+                            return;
+                          }
+                          window.open(`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp)}`, '_blank');
+                        }}
+                        className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all"
+                        title="Conversar no WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                      </button>
                     </div>
                   </div>
                   <div className="col-span-2">
@@ -1385,17 +1426,20 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
                       <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">WhatsApp / Telefone</p>
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-bold text-slate-700">{[client.whatsapp, client.telefone].filter(Boolean).join(' / ') || 'N/A'}</p>
-                        {(client.whatsapp || client.telefone) && (
-                          <a 
-                            href={`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp || client.telefone)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1 px-2 bg-emerald-50 text-emerald-600 rounded-lg"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                          </a>
-                        )}
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!client.whatsapp) {
+                              alert("cliente sem whatsapp");
+                              return;
+                            }
+                            window.open(`https://wa.me/${cleanPhoneNumberForWhatsApp(client.whatsapp)}`, '_blank');
+                          }}
+                          className="p-1 px-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all"
+                          title="Conversar no WhatsApp"
+                        >
+                          <MessageCircle className="w-3 h-3 fill-current" />
+                        </button>
                       </div>
                     </div>
                     <div>
@@ -3395,10 +3439,13 @@ function CalendarView({ appointments, onEdit, onAdd }: {
                 
                 <div className="space-y-1.5 overflow-hidden">
                   {dayApps.map(app => (
-                    <button
+                    <div
                       key={app.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={(e) => { e.stopPropagation(); onEdit(app); }}
-                      className={`w-full text-left p-2 rounded-xl border transition-all text-[0.65rem] truncate leading-tight flex flex-col gap-0.5 ${
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onEdit(app); } }}
+                      className={`w-full text-left p-2 rounded-xl border transition-all text-[0.65rem] truncate leading-tight flex flex-col gap-0.5 cursor-pointer ${
                         app.type === 'visita' ? 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100' :
                         app.type === 'negociação' ? 'bg-amber-50 border-amber-100 text-amber-700 hover:bg-amber-100' :
                         app.type === 'follow-up' ? 'bg-blue-50 border-blue-100 text-blue-700 hover:bg-blue-100' :
@@ -3427,7 +3474,7 @@ function CalendarView({ appointments, onEdit, onAdd }: {
                         </button>
                       </div>
                       {app.clients?.nome && <span className="opacity-70 font-medium whitespace-nowrap">Cli: {app.clients.nome}</span>}
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -3448,6 +3495,7 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     clientId: '',
@@ -3461,6 +3509,7 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
 
   useEffect(() => {
     if (isOpen) {
+      setShowConfirmDelete(false);
       if (initialData) {
         setFormData({
           title: initialData.title || '',
@@ -3534,7 +3583,11 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
 
   const handleDelete = async () => {
     if (!initialData) return;
-    if (!confirm("Tem certeza que deseja cancelar este evento?")) return;
+    
+    if (!showConfirmDelete) {
+      setShowConfirmDelete(true);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -3694,7 +3747,7 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
               />
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
                <button 
                 type="button"
                 className="flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl text-[0.65rem] font-bold"
@@ -3709,6 +3762,26 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
                 <RefreshCw className="w-3.5 h-3.5" />
                 Outlook
               </button>
+              {formData.clientId && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const selectedClient = clients.find(c => c.id === formData.clientId);
+                    if (!selectedClient?.whatsapp) {
+                      alert("cliente sem whatsapp");
+                      return;
+                    }
+                    const phone = cleanPhoneNumberForWhatsApp(selectedClient.whatsapp);
+                    const formattedDate = format(parseISO(formData.date), 'dd/MM/yyyy');
+                    const message = encodeURIComponent(`Olá ${selectedClient.nome}, aqui é o Rogério. Gostaria de confirmar nosso agendamento de ${formData.type || 'reunião'} no dia ${formattedDate} às ${formData.startTime}. Podemos confirmar?`);
+                    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                  }}
+                  className="flex items-center gap-2 px-4 py-3 bg-emerald-50 text-emerald-600 rounded-xl text-[0.65rem] font-bold hover:bg-emerald-100 transition-all border border-emerald-100"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                  Enviar WhatsApp
+                </button>
+              )}
             </div>
           </div>
 
@@ -3717,10 +3790,23 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
               <button 
                 type="button"
                 onClick={handleDelete}
-                className="mr-auto px-6 py-4 text-red-400 font-bold hover:text-red-600 transition-all flex items-center gap-2"
+                className={`mr-auto px-6 py-4 rounded-2xl font-bold transition-all flex items-center gap-2 ${
+                  showConfirmDelete 
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-200' 
+                    : 'text-red-400 hover:text-red-600'
+                }`}
               >
-                <Trash2 className="w-5 h-5" />
-                Excluir
+                {showConfirmDelete ? (
+                  <>
+                    <Trash2 className="w-5 h-5" />
+                    Confirmar Exclusão?
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-5 h-5" />
+                    Excluir
+                  </>
+                )}
               </button>
             )}
             <button 
