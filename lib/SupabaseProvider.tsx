@@ -35,7 +35,6 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         .single();
       
       if (error && error.code === 'PGRST116') {
-        // Profile doesn't exist, create it
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           const { data: newProfile, error: createError } = await supabase
@@ -51,13 +50,22 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             .select()
             .single();
           
-          if (!createError) setProfile(newProfile);
+          if (createError) {
+            console.error('Error creating profile:', createError);
+            setEnvError(`Erro ao criar perfil no Supabase: ${createError.message}. Verifique as políticas de RLS.`);
+          } else {
+            setProfile(newProfile);
+          }
         }
-      } else if (!error) {
+      } else if (error) {
+        console.error('Error fetching profile:', error);
+        setEnvError(`Erro ao buscar perfil: ${error.message}`);
+      } else {
         setProfile(data);
       }
-    } catch (err) {
-      console.error('Error fetching profile:', err);
+    } catch (err: any) {
+      console.error('Unexpected error in fetchProfile:', err);
+      setEnvError(`Erro inesperado no perfil: ${err.message}`);
     } finally {
       setLoading(false);
     }

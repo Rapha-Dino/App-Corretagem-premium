@@ -44,7 +44,6 @@ import {
   Filter,
   BarChart3,
   MousePointer2,
-  Home,
   Warehouse,
   Trees,
   ShoppingBag,
@@ -75,6 +74,7 @@ import Papa from 'papaparse';
 import { PortfolioView } from '@/components/PortfolioView';
 import { MatchesView } from '@/components/MatchesView';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { KanbanView } from '@/components/KanbanView';
 import { 
   BarChart, 
   Bar, 
@@ -243,11 +243,36 @@ export default function Home() {
         }
         
         console.log("[DIAGNOSTIC] Fetching clients for user:", user.id);
-        const { data, error } = await supabase
+        
+        // Try ordering by created_at first (standard)
+        const query = supabase
           .from('clients')
           .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+          .eq('user_id', user.id);
+        
+        let { data, error } = await query.order('created_at', { ascending: false });
+        
+        // Fallback: if created_at fails, try data_entrada or no order
+        if (error && (error.message?.includes('column "created_at" does not exist') || error.code === '42703')) {
+          console.warn("[DIAGNOSTIC] 'created_at' column missing, falling back to 'data_entrada'");
+          const fallback = await supabase
+            .from('clients')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('data_entrada', { ascending: false });
+          data = fallback.data;
+          error = fallback.error;
+          
+          if (error) {
+             console.warn("[DIAGNOSTIC] Fallback to 'data_entrada' also failed, fetching without order");
+             const simpleFetch = await supabase
+               .from('clients')
+               .select('*')
+               .eq('user_id', user.id);
+             data = simpleFetch.data;
+             error = simpleFetch.error;
+          }
+        }
         
         if (error) {
           const detailedError: any = {};
@@ -322,25 +347,7 @@ export default function Home() {
     });
   }, [appointments]);
 
-  useEffect(() => {
-    if (!user || clients.length === 0) return;
-    const cleanup = async () => {
-      const hallucinativeIds = clients
-        .filter(c => c.foto_url && (c.foto_url.includes('picsum.photos') || c.foto_url.includes('seed')))
-        .map(c => c.id);
-        
-      if (hallucinativeIds.length > 0) {
-        console.log(`[CLEANUP] Found ${hallucinativeIds.length} hallucinative photos. Cleaning up...`);
-        await supabase
-          .from('clients')
-          .update({ foto_url: null })
-          .in('id', hallucinativeIds);
-        setRefreshKey(prev => prev + 1);
-      }
-    };
-    cleanup();
-  }, [user, clients]);
-
+  // Logout handler
   const handleLogout = () => supabase.auth.signOut();
 
   const closeSidebar = () => setIsSidebarOpen(false);
@@ -627,11 +634,13 @@ export default function Home() {
               />
             )}
             {activeView === 'pipeline' && (
-              <Pipeline 
+              <KanbanView 
                 clients={clients} 
-                onClientClick={openClientDetail} 
-                updateClientStatus={updateClientStatus}
-                onSchedule={() => setActiveView('calendar')}
+                clientSearchTerm=""
+                getStatusColor={getStatusColor}
+                getStatusLabel={getStatusLabel}
+                onEditClient={openClientDetail}
+                openWhatsApp={openWhatsApp}
               />
             )}
             {activeView === 'portfolio' && (
@@ -1612,308 +1621,6 @@ function DraggableCard({
         </AnimatePresence>
       </motion.div>
     </div>
-  );
-}
-
-function Pipeline({ 
-  clients, 
-  onClientClick, 
-  updateClientStatus,
-  onSchedule 
-}: { 
-  clients: any[], 
-  onClientClick: (id: string) => void,
-  updateClientStatus: (id: string, status: string) => void,
-  onSchedule: () => void 
-}) {
-  const [funnelView, setFunnelView] = useState<'kanban' | 'analytics'>('kanban');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [stages, setStages] = useState([
-    { id: 'Ativo', label: 'Novos Leads', color: 'bg-blue-500' },
-    { id: 'Em Atendimento', label: 'Em Atendimento', color: 'bg-amber-500' },
-    { id: 'Visita', label: 'Visitas', color: 'bg-purple-500' },
-    { id: 'Negociação', label: 'Negociação', color: 'bg-emerald-500' },
-    { id: 'Fechado', label: 'Fechados', color: 'bg-slate-900' }
-  ]);
-  const [activeClient, setActiveClient] = useState<any>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const filteredClients = clients.filter(c => filterType === 'all' || c.tipo === filterType);
-
-  // Metrics calculation
-  const totalValue = filteredClients.reduce((acc, c) => acc + (Number(c.valor_buscado) || 0), 0);
-  const conversionRate = (clients.filter(c => c.status === 'Fechado').length / (clients.length || 1) * 100).toFixed(1);
-  const avgTime = 14; 
-  const stalledLeads = filteredClients.filter(c => {
-    if (!c.updated_at) return false;
-    const lastUpdate = new Date(c.updated_at);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    return lastUpdate < thirtyDaysAgo;
-  });
-
-  const comparisonData = [
-    { name: 'Jan', atual: 4000, anterior: 2400 },
-    { name: 'Fev', atual: 3000, anterior: 1398 },
-    { name: 'Mar', atual: 2000, anterior: 9800 },
-    { name: 'Abr', atual: 2780, anterior: 3908 },
-  ];
-
-  const handleDragStart = (event: any) => {
-    const { active } = event;
-    const client = filteredClients.find(c => c.id === active.id);
-    setActiveClient(client);
-  };
-
-  const handleDragEnd = (event: any) => {
-    const { active, over } = event;
-    setActiveClient(null);
-
-    if (!over) return;
-
-    const clientId = active.id;
-    const overId = over.id;
-
-    // Check if over is a stage id or a client id
-    let newStatus = overId;
-    if (!stages.find(s => s.id === overId)) {
-      const overClient = filteredClients.find(c => c.id === overId);
-      if (overClient) newStatus = overClient.status;
-    }
-
-    if (stages.find(s => s.id === newStatus)) {
-      const client = filteredClients.find(c => c.id === clientId);
-      if (client && client.status !== newStatus) {
-        updateClientStatus(clientId, newStatus);
-      }
-    }
-  };
-
-  const addStage = () => {
-    const name = window.prompt('Nome da nova etapa:');
-    if (name) {
-      setStages([...stages, { 
-        id: name, 
-        label: name, 
-        color: 'bg-slate-400' 
-      }]);
-    }
-  };
-
-  return (
-    <DndContext 
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="space-y-8"
-      >
-        {/* Header & Controls */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">Funil Avançado</h3>
-              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-[0.6rem] font-bold uppercase rounded-full tracking-widest">Premium</span>
-            </div>
-            <p className="text-[#003366] text-xs font-bold uppercase tracking-widest">Gestão de Performance e Conversão</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button 
-                onClick={() => setFunnelView('kanban')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${funnelView === 'kanban' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
-              >
-                <Kanban className="w-4 h-4" /> Kanban
-              </button>
-              <button 
-                onClick={() => setFunnelView('analytics')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${funnelView === 'analytics' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
-              >
-                <BarChart3 className="w-4 h-4" /> Insights
-              </button>
-            </div>
-
-            <div className="relative group">
-              <select 
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="appearance-none bg-white border border-slate-200 px-10 py-2.5 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
-              >
-                <option value="all">Filtro: Todos Imóveis</option>
-                <option value="Casa">Casas</option>
-                <option value="Apartamento">Apartamentos</option>
-                <option value="Terreno">Terrenos</option>
-              </select>
-              <Filter className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            </div>
-          </div>
-        </div>
-
-        {funnelView === 'analytics' ? (
-          <div className="space-y-8">
-            {/* Analytics View */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Taxa de Conversão</p>
-                <h4 className="text-2xl font-black text-slate-900">{conversionRate}%</h4>
-                <p className="text-[0.65rem] text-emerald-500 font-bold mt-2">↑ 2.4% vs mês anterior</p>
-              </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">VGV em Negociação</p>
-                <h4 className="text-2xl font-black text-slate-900">R$ {(totalValue / 1000000).toFixed(2)}M</h4>
-                <p className="text-[0.65rem] text-blue-500 font-bold mt-2">18 oportunidades ativas</p>
-              </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Tempo Médio p/ Fechar</p>
-                <h4 className="text-2xl font-black text-slate-900">{avgTime} dias</h4>
-                <p className="text-[0.65rem] text-amber-500 font-bold mt-2">Ciclo de venda médio</p>
-              </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <p className="text-[0.6rem] font-bold text-[#003366] uppercase tracking-widest mb-1">Previsão de Fechamento</p>
-                <h4 className="text-2xl font-black text-emerald-600">R$ {(totalValue * 0.15 / 1000000).toFixed(2)}M</h4>
-                <p className="text-[0.65rem] text-slate-400 font-bold mt-2">Probabilidade ponderada (15%)</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-8">Conversão Mês a Mês</h3>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={comparisonData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} />
-                      <YAxis hide />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      />
-                      <Bar dataKey="atual" name="Este Mês" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
-                      <Bar dataKey="anterior" name="Mês Anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-8">Performance do Funil</h3>
-                <div className="space-y-6">
-                  {stages.map((s, i) => {
-                    const count = filteredClients.filter(c => c.status === s.id).length;
-                    const percentage = (count / (filteredClients.length || 1) * 100);
-                    return (
-                      <div key={s.id} className="space-y-2">
-                        <div className="flex justify-between items-center text-xs font-bold">
-                          <span className="text-slate-600 uppercase tracking-widest">{s.label}</span>
-                          <span className="text-slate-900">{count} leads</span>
-                        </div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${percentage}%` }}
-                            transition={{ delay: i * 0.1, duration: 1 }}
-                            className={`h-full ${s.color}`}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-6 min-w-full items-start pb-10 overflow-x-auto no-scrollbar scroll-smooth">
-            {stages.map((stage) => {
-              const stageClients = filteredClients.filter(c => c.status === stage.id);
-              
-              return (
-                <div key={stage.id} className="flex flex-col gap-6 min-w-[300px] max-w-[300px]">
-                  <div className="flex justify-between items-center px-4 py-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                      <span className="text-[0.7rem] font-black uppercase tracking-[0.1em] text-slate-900">{stage.label}</span>
-                    </div>
-                    <span className="text-[0.65rem] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">
-                      {stageClients.length}
-                    </span>
-                  </div>
-                  
-                  <SortableContext 
-                    id={stage.id}
-                    items={stageClients.map(c => c.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div 
-                      className="space-y-4 min-h-[600px] p-2 rounded-3xl bg-slate-100/30 border-2 border-dashed border-slate-200/50 transition-colors"
-                    >
-                      {stageClients.map((client) => {
-                        const isStalled = stalledLeads.some(s => s.id === client.id);
-                        const isClosingSoon = client.status === 'Negociação';
-
-                        return (
-                          <DraggableCard 
-                            key={client.id}
-                            client={client}
-                            onClientClick={onClientClick}
-                            isStalled={isStalled}
-                            isClosingSoon={isClosingSoon}
-                            onSchedule={onSchedule}
-                            onFollowUp={() => {
-                              const phone = cleanPhoneNumberForWhatsApp(client.telefone || '');
-                              if (phone) window.open(`https://wa.me/${phone}`, '_blank');
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  </SortableContext>
-                </div>
-              );
-            })}
-            
-            <button 
-              onClick={addStage}
-              className="min-w-[300px] h-[700px] rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/30 transition-all group"
-            >
-              <Plus className="w-8 h-8 mb-4 group-hover:scale-110 transition-transform" />
-              <p className="text-xs font-bold uppercase tracking-widest">Nova Etapa</p>
-            </button>
-          </div>
-        )}
-
-        <DragOverlay>
-          {activeClient ? (
-            <div className="w-[280px]">
-              <div className="bg-white rounded-2xl p-4 shadow-2xl border-2 border-blue-400 opacity-90">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-slate-900 text-sm truncate">{activeClient.nome}</h4>
-                    <p className="text-[0.6rem] text-slate-400 font-medium truncate">{activeClient.tipo}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </motion.div>
-    </DndContext>
   );
 }
 

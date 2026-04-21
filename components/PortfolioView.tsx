@@ -194,7 +194,7 @@ export function PortfolioView({ onRefresh }: { onRefresh: () => void }) {
               return nk.includes('fundo') || nk.includes('profundidade');
             })?.[1];
 
-            const addr = normalized.enderecocompleto || normalized.endereco || normalized.rua || normalized.logradouro || normalized.enderecodooimovel || normalized.enderecodaimovel || normalized.localizacao || normalized.ruacompleta || normalized.descrendereco || normalized.enderecodooimovelcompleto || normalized.enderecodoimovel || normalized.nomedarua || normalized.fulladdress || String(fuzzyAddress || '');
+            const addr = normalized.enderecocompleto || normalized.endereco || normalized.rua || normalized.logradouro || normalized.enderecodooimovel || normalized.enderecodaimovel || normalized.localizacao || normalized.ruacompleta || normalized.descrendereco || normalized.enderecodooimovelcompleto || normalized.enderecodoimovel || normalized.nomedarua || normalized.fulladdress || normalized.enderecom || String(fuzzyAddress || '');
 
             if (index === 0 && !addr) {
               console.warn("ALERTA: Endereço não detectado na primeira linha. Chaves disponíveis:", Object.keys(normalized));
@@ -202,7 +202,7 @@ export function PortfolioView({ onRefresh }: { onRefresh: () => void }) {
 
             return {
               user_id: user.id,
-              owner_name: String(normalized.nome || normalized.proprietario || normalized.owner || String(fallbackName)).substring(0, 100),
+              owner_name: String(normalized.nome || normalized.proprietario || normalized.owner || normalized.nomedoproprietario || normalized.proprietarioa || normalized.proprietario || normalized.contato || 'Sem Nome').substring(0, 100),
               owner_phone: normalized.telefone || normalized.phone || '',
               owner_whatsapp: normalized.whatsapp || normalized.celular || '',
               owner_email: normalized.email || '',
@@ -212,8 +212,11 @@ export function PortfolioView({ onRefresh }: { onRefresh: () => void }) {
               neighborhood: normalized.bairro || normalized.vizinhanca || normalized.distrito || '',
               cep: normalized.cep || normalized.codigopostal || normalized.cepimovel || '',
               sale_value: Number(String(normalized.valor || normalized.preco || normalized.valorvenda || normalized.valordevenda || normalized.valorvendas || normalized.precodevenda || '0').replace(/[^\d]/g, '')) || 0,
+              condo_value: Number(String(normalized.valorcondominio || normalized.valor_condominio || normalized.condo || normalized.taxacondominio || normalized.condominio || '0').replace(/[^\d]/g, '')) || 0,
+              condo_name: normalized.nomecondominio || normalized.nome_condominio || normalized.edificio || normalized.predio || normalized.nomeedificio || '',
               property_type: normalized.tipo || normalized.categoria || normalized.tipoimovel || 'Casa',
               rooms: Number(String(normalized.quartos || normalized.dormitorios || normalized.qtdquartos || 0).replace(',', '.')),
+              living_rooms: Number(String(normalized.salas || normalized.sala || normalized.livingrooms || normalized.saladeestar || 0).replace(',', '.')),
               bathrooms: Number(String(normalized.banheiro || normalized.wc || normalized.banheiros || 0).replace(',', '.')),
               suites: Number(String(normalized.suites || 0).replace(',', '.')),
               kitchens: Number(String(normalized.cozinhas || normalized.cozinha || 0).replace(',', '.')),
@@ -222,6 +225,11 @@ export function PortfolioView({ onRefresh }: { onRefresh: () => void }) {
               total_size_m2: Number(String(normalized.tamanho || normalized.area || normalized.metragem || normalized.area_total || normalized.at || normalized.aream2 || 0).replace(',', '.')),
               built_area_m2: Number(String(normalized.areaconstruida || normalized.area_util || normalized.ac || normalized.const || 0).replace(',', '.')),
               property_code: normalized.codigo || normalized.ref || normalized.id_imovel || normalized.referencia || normalized.codimovel || '',
+              unit_ap: normalized.unidade || normalized.ap || normalized.apartamento_num || normalized.apartamento || '',
+              block: normalized.bloco || '',
+              parking_number: normalized.vaga_numero || normalized.num_vaga || normalized.numerodavaga || normalized.numerovaga || '',
+              iptu: Number(String(normalized.iptu || normalized.valoriptu || normalized.taxaiptu || '0').replace(/[^\d]/g, '')) || 0,
+              balcony_type: normalized.sacada || normalized.varanda || normalized.varandagourmet || normalized.sacadavaranda || 'Nenhuma',
               has_edicula: String(normalized.edicula || normalized.temedicula || '0').toLowerCase().trim() === '1' || String(normalized.edicula || normalized.temedicula || '').toLowerCase().trim() === 'sim' || String(normalized.edicula || normalized.temedicula || '').toLowerCase().trim() === 'true',
               has_backyard: String(normalized.quintal || normalized.temquintal || '0').toLowerCase().trim() === '1' || String(normalized.quintal || normalized.temquintal || '').toLowerCase().trim() === 'sim' || String(normalized.quintal || normalized.temquintal || '').toLowerCase().trim() === 'true',
               has_sign: String(normalized.placa || normalized.templaca || '0').toLowerCase().trim() === '1' || String(normalized.placa || normalized.templaca || '').toLowerCase().trim() === 'sim' || String(normalized.placa || normalized.templaca || '').toLowerCase().trim() === 'true',
@@ -490,6 +498,8 @@ function PropertyModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: bo
     neighborhood: '',
     cep: '',
     sale_value: '',
+    condo_value: '',
+    condo_name: '',
     proximity: 'N/A',
     front_m: '',
     depth_m: '',
@@ -534,6 +544,8 @@ function PropertyModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: bo
         neighborhood: initialData.neighborhood || '',
         cep: initialData.cep || '',
         sale_value: initialData.sale_value?.toString() || '',
+        condo_value: initialData.condo_value?.toString() || '',
+        condo_name: initialData.condo_name || '',
         proximity: initialData.proximity || 'N/A',
         front_m: initialData.front_m?.toString() || '',
         depth_m: initialData.depth_m?.toString() || '',
@@ -615,6 +627,7 @@ function PropertyModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: bo
         ...formData,
         user_id: user.id,
         sale_value: Number(formData.sale_value) || 0,
+        condo_value: Number(formData.condo_value) || 0,
         front_m: Number(formData.front_m) || 0,
         depth_m: Number(formData.depth_m) || 0,
         total_size_m2: Number(formData.total_size_m2) || 0,
@@ -797,6 +810,14 @@ function PropertyModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: bo
                 <input type="number" required value={formData.sale_value} onChange={e => setFormData({...formData, sale_value: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
               </div>
               <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Valor Condomínio (R$)</label>
+                <input type="number" value={formData.condo_value} onChange={e => setFormData({...formData, condo_value: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Nome do Condomínio</label>
+                <input value={formData.condo_name} onChange={e => setFormData({...formData, condo_name: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2">
                 <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Proximidades</label>
                 <select value={formData.proximity} onChange={e => setFormData({...formData, proximity: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold cursor-pointer">
                   <option value="N/A">N/A</option>
@@ -816,6 +837,18 @@ function PropertyModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: bo
               <div className="space-y-2">
                 <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Código</label>
                 <input value={formData.property_code} onChange={e => setFormData({...formData, property_code: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Unid./AP</label>
+                <input value={formData.unit_ap} onChange={e => setFormData({...formData, unit_ap: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Bloco</label>
+                <input value={formData.block} onChange={e => setFormData({...formData, block: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">IPTU (R$)</label>
+                <input type="number" value={formData.iptu} onChange={e => setFormData({...formData, iptu: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
               </div>
 
               <div className="space-y-2">
@@ -858,6 +891,14 @@ function PropertyModal({ isOpen, onClose, initialData, onSuccess }: { isOpen: bo
               <div className="space-y-2">
                 <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Vagas</label>
                 <input type="number" value={formData.parking_spaces} onChange={e => setFormData({...formData, parking_spaces: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Número da Vaga</label>
+                <input value={formData.parking_number} onChange={e => setFormData({...formData, parking_number: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest ml-1">Sacada / Varanda</label>
+                <input value={formData.balcony_type} onChange={e => setFormData({...formData, balcony_type: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold" placeholder="Ex: Varanda Gourmet, Sacada Simples..." />
               </div>
 
               <div className="space-y-2">
