@@ -3536,3 +3536,18 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
     </div>
   );
 }
+function getStatusColor(status: string): string {
+  switch (status) {
+    case "ativo": return "green";
+    case "inativo": return "red";
+    default: return "gray";
+  }
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case "ativo": return "Cliente ativo";
+    case "inativo": return "Cliente inativo";
+    default: return "Status desconhecido";
+  }
+}
