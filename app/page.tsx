@@ -2431,13 +2431,3 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
   );
 }
 
-function getStatusLabel(status: string): string {
-  switch (status) {
-    case 'Ativo': return 'Novos Leads';
-    case 'Em Atendimento': return 'Em Atendimento';
-    case 'Visita': return 'Visitas';
-    case 'Negociação': return 'Negociação';
-    case 'Fechado': return 'Fechados';
-    default: return status;
-  }
-}

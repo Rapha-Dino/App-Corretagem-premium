@@ -156,7 +156,7 @@ export function Dashboard({ metrics, clients, appointments, onClientClick, onAdd
           </div>
           <div className="h-[250px] md:h-[300px] w-full relative">
             {mounted && (
-              <ResponsiveContainer width="100%" height="100%" id="dashboard-funnel-container">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} id="dashboard-funnel-container">
                 <BarChart data={funnelData} layout="vertical" margin={{ left: 40, right: 40 }}>
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#003366' }} />
