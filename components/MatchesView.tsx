@@ -32,6 +32,7 @@ export function MatchesView({ onClientClick, onPropertyClick }: { onClientClick:
   const [filterPropertyType, setFilterPropertyType] = useState<string>('Todos');
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000000]);
   const [selectedViewClientId, setSelectedViewClientId] = useState<string>('Todos');
+  const [selectedViewPropertyId, setSelectedViewPropertyId] = useState<string>('Todos');
   
   const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
 
@@ -138,14 +139,15 @@ export function MatchesView({ onClientClick, onPropertyClick }: { onClientClick:
   const filteredMatches = useMemo(() => {
     return matches.filter(m => {
        const clientMatch = selectedViewClientId === 'Todos' || m.client.id === selectedViewClientId;
+       const propertyMatch = selectedViewPropertyId === 'Todos' || m.property.id === selectedViewPropertyId;
        const roomMatch = m.property.rooms >= filterMinRooms;
        const parkingMatch = m.property.parking_spaces >= filterMinParking;
        const typeMatch = filterPropertyType === 'Todos' || m.property.property_type === filterPropertyType;
        const priceMatch = m.property.sale_value >= priceRange[0] && m.property.sale_value <= priceRange[1];
        
-       return clientMatch && roomMatch && parkingMatch && typeMatch && priceMatch;
+       return clientMatch && propertyMatch && roomMatch && parkingMatch && typeMatch && priceMatch;
     });
-  }, [matches, selectedViewClientId, filterMinRooms, filterMinParking, filterPropertyType, priceRange]);
+  }, [matches, selectedViewClientId, selectedViewPropertyId, filterMinRooms, filterMinParking, filterPropertyType, priceRange]);
 
   if (loading) {
     return (
@@ -194,6 +196,23 @@ export function MatchesView({ onClientClick, onPropertyClick }: { onClientClick:
                   <option value="Todos">Todos os Clientes</option>
                   {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+                <ChevronRight className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+             </div>
+          </div>
+
+          <div className="space-y-2">
+             <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Filtrar por Imóvel</label>
+             <div className="relative">
+                <select 
+                  value={selectedViewPropertyId} 
+                  onChange={(e) => setSelectedViewPropertyId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-blue-100 appearance-none"
+                >
+                  <option value="Todos">Todos os Imóveis</option>
+                  {properties.map(p => (
+                    <option key={p.id} value={p.id}>{p.property_code || 'S/C'} - {p.address}</option>
                   ))}
                 </select>
                 <ChevronRight className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />

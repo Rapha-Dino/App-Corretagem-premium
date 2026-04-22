@@ -82,6 +82,7 @@ export default function Home() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<any>(null);
+  const [selectedViewAppointment, setSelectedViewAppointment] = useState<any>(null);
   const [metrics, setMetrics] = useState({
     totalClients: 0,
     activePipeline: 0,
@@ -494,7 +495,7 @@ export default function Home() {
             {activeView === 'calendar' && (
               <CalendarView 
                 appointments={appointments} 
-                onEdit={(app) => { setEditingAppointment(app); setIsScheduleModalOpen(true); }}
+                onEdit={(app) => { setSelectedViewAppointment(app); }}
                 onAdd={() => { setEditingAppointment(null); setIsScheduleModalOpen(true); }}
               />
             )}
@@ -543,6 +544,26 @@ export default function Home() {
         initialData={editingAppointment}
         clients={clients}
         onSuccess={refreshClientsData}
+      />
+      
+      <AppointmentDetailModal
+        isOpen={!!selectedViewAppointment}
+        onClose={() => setSelectedViewAppointment(null)}
+        appointment={selectedViewAppointment}
+        onEdit={(app) => {
+          setSelectedViewAppointment(null);
+          setEditingAppointment(app);
+          setIsScheduleModalOpen(true);
+        }}
+        onDelete={async (id) => {
+          try {
+            await supabase.from('appointments').delete().eq('id', id);
+            refreshClientsData();
+            setSelectedViewAppointment(null);
+          } catch (err) {
+            console.error("Error deleting appointment:", err);
+          }
+        }}
       />
       
       {selectedPropertyForDetail && (
@@ -2426,6 +2447,103 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
             </button>
           </div>
         </form>
+      </motion.div>
+    </div>
+  );
+}
+
+function AppointmentDetailModal({ isOpen, onClose, appointment, onEdit, onDelete }: {
+  isOpen: boolean;
+  onClose: () => void;
+  appointment: any;
+  onEdit: (app: any) => void;
+  onDelete: (id: string) => void;
+}) {
+  if (!isOpen || !appointment) return null;
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden"
+      >
+        <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+          <div>
+            <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Agenda Profissional</span>
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight">{appointment.title}</h3>
+          </div>
+          <button onClick={onClose} className="p-3 bg-slate-50 text-slate-400 rounded-xl transition-all">
+            <Plus className="w-5 h-5 rotate-45" />
+          </button>
+        </div>
+
+        <div className="p-8 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-1">
+              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Tipo</span>
+              <p className="text-sm font-bold text-slate-900 capitalize uppercase">{appointment.type || '---'}</p>
+            </div>
+            <div className="space-y-1">
+              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Cliente</span>
+              <p className="text-sm font-bold text-slate-900">{appointment.clients?.nome || 'Não vinculado'}</p>
+            </div>
+            <div className="space-y-1">
+              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Data</span>
+              <p className="text-sm font-bold text-slate-900">{format(parseISO(appointment.start_time), 'dd/MM/yyyy')}</p>
+            </div>
+            <div className="space-y-1">
+              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Horário</span>
+              <p className="text-sm font-bold text-slate-900">{format(parseISO(appointment.start_time), 'HH:mm')}</p>
+            </div>
+          </div>
+
+          {appointment.location && (
+            <div className="space-y-1">
+              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Local / Link</span>
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <MapPin className="w-4 h-4 text-blue-500" />
+                <span className="truncate">{appointment.location}</span>
+              </div>
+            </div>
+          )}
+
+          {appointment.description && (
+            <div className="space-y-1">
+              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Notas</span>
+              <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                {appointment.description}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-3">
+          <button
+            onClick={() => {
+              if (confirm('Tem certeza que deseja excluir este agendamento?')) {
+                onDelete(appointment.id);
+              }
+            }}
+            className="px-6 py-3 text-red-500 font-bold text-xs uppercase tracking-widest hover:bg-red-100/50 rounded-xl transition-all flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Excluir
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={onClose}
+            className="px-6 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-all"
+          >
+            Fechar
+          </button>
+          <button
+            onClick={() => onEdit(appointment)}
+            className="px-10 py-4 bg-slate-900 text-white rounded-[1rem] font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20"
+          >
+            Editar Informações
+          </button>
+        </div>
       </motion.div>
     </div>
   );
