@@ -4,11 +4,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Target, 
-  Search, 
   Filter, 
   User, 
   Home, 
-  MapPin, 
   Building2, 
   Car, 
   BedDouble, 
@@ -18,7 +16,6 @@ import {
   X,
   MessageCircle,
   Phone,
-  ArrowUpDown,
   Zap,
   Star
 } from 'lucide-react';
@@ -37,7 +34,6 @@ export function MatchesView({ onClientClick, onPropertyClick }: { onClientClick:
   const [selectedViewClientId, setSelectedViewClientId] = useState<string>('Todos');
   
   const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
-  const [clientSearchTerm, setClientSearchTerm] = useState('');
 
   useEffect(() => {
     async function fetchData() {

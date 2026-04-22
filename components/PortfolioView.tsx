@@ -10,24 +10,13 @@ import {
   Building2, 
   Target, 
   Phone, 
-  MessageCircle, 
-  Mail, 
   User, 
   ImageIcon, 
-  Grid, 
   RefreshCw,
-  FileText,
-  Calendar,
-  Check,
   Trash2,
-  Camera,
-  Trees,
-  X,
-  Maximize2,
-  Layers,
-  DoorOpen
+  Camera
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
 import { supabase } from '@/lib/supabase';
@@ -46,15 +35,6 @@ const calculateAge = (birthday: string) => {
     age--;
   }
   return age;
-};
-
-const cleanPhoneNumberForWhatsApp = (phone: string) => {
-  if (!phone) return "";
-  let cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 10 || cleaned.length === 11) {
-    cleaned = "55" + cleaned;
-  }
-  return cleaned;
 };
 
 const parseBRDateToISO = (dateStr: string | null) => {
@@ -277,7 +257,13 @@ export function PortfolioView({ onRefresh }: { onRefresh: () => void }) {
       {/* Header com Layout Reorganizado */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex-1">
-          <h3 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Proprietários & Imóveis</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+            <h3 className="text-3xl font-black text-slate-900 tracking-tight">Proprietários & Imóveis</h3>
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-sm font-black border border-blue-100 shadow-sm w-fit">
+              <Building2 className="w-4 h-4" />
+              {filteredProperties.length} {filteredProperties.length === 1 ? 'Imóvel' : 'Imóveis'}
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <p className="text-[#003366] text-xs font-bold uppercase tracking-widest">Gestão de Carteira e Captação</p>
             <div className="h-4 w-px bg-slate-200" />

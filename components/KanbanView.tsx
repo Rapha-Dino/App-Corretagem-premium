@@ -4,15 +4,10 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { 
   Users, 
-  Search, 
-  MapPin, 
-  Phone, 
-  Mail, 
   Calendar, 
   MessageCircle,
   FileText,
   DollarSign,
-  TrendingUp,
   Clock,
   UserPlus
 } from 'lucide-react';
