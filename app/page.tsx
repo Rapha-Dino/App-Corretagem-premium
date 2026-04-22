@@ -57,7 +57,6 @@ import Papa from 'papaparse';
 import { PortfolioView } from '@/components/PortfolioView';
 import { MatchesView } from '@/components/MatchesView';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
-import { KanbanView } from '@/components/KanbanView';
 import { Dashboard } from '@/components/Dashboard';
 import { ClientDetail } from '@/components/ClientDetail';
 
@@ -499,16 +498,6 @@ export default function Home() {
                 onAdd={() => { setEditingAppointment(null); setIsScheduleModalOpen(true); }}
               />
             )}
-            {activeView === 'pipeline' && (
-              <KanbanView 
-                clients={clients} 
-                clientSearchTerm=""
-                getStatusColor={getStatusColor}
-                getStatusLabel={getStatusLabel}
-                onEditClient={openClientDetail}
-                openWhatsApp={openWhatsApp}
-              />
-            )}
             {activeView === 'portfolio' && (
               <PortfolioView 
                 onRefresh={refreshClientsData}
@@ -530,7 +519,7 @@ export default function Home() {
               />
             )}
             {activeView === 'settings' && <SettingsView profile={profile} />}
-            {['financial', 'analytics'].includes(activeView) && (
+            {['pipeline', 'financial', 'analytics'].includes(activeView) && (
               <div className="flex flex-col items-center justify-center h-full text-slate-400">
                 <span className="text-6xl mb-4">🚧</span>
                 <h3 className="text-xl font-bold">Em breve</h3>
@@ -2440,13 +2429,6 @@ function ScheduleModal({ isOpen, onClose, initialData, clients, onSuccess }: {
       </motion.div>
     </div>
   );
-}
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "ativo": return "green";
-    case "inativo": return "red";
-    default: return "gray";
-  }
 }
 
 function getStatusLabel(status: string): string {

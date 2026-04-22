@@ -1,5 +1,3 @@
-import { format } from 'date-fns';
-
 export const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<string> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
