@@ -81,7 +81,6 @@ export async function GET(request: Request) {
   let sent24h = 0;
   if (appts24h && appts24h.length > 0) {
     for (const app of appts24h) {
-      // @ts-expect-error - user_profile is joined from profiles
       const userWhatsapp = app.user_profile?.whatsapp;
       if (!userWhatsapp) continue;
 
@@ -113,7 +112,6 @@ export async function GET(request: Request) {
   let sent3h = 0;
   if (appts3h && appts3h.length > 0) {
     for (const app of appts3h) {
-      // @ts-expect-error - user_profile is joined from profiles
       const userWhatsapp = app.user_profile?.whatsapp;
       if (!userWhatsapp) continue;
 

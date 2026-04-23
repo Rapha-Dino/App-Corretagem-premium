@@ -2089,7 +2089,6 @@ function CalendarView({ appointments, onEdit, onAdd }: {
             const isTodayDay = isToday(day);
             const isCurrentMonth = isSameMonth(day, monthStart);
             const isPastDay = isBefore(day, startOfToday());
-            const isFutureDay = !isPastDay && !isTodayDay;
 
             return (
               <div 
