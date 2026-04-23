@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import Image from 'next/image';
 import { useSupabase } from '@/lib/SupabaseProvider';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -495,10 +496,13 @@ export default function Home() {
                   <p className="text-xs text-slate-400">Corretor</p>
                 </div>
                 {profile?.photo_url ? (
-                  <img 
+                  <Image 
                     src={profile.photo_url} 
                     alt="Profile" 
-                    className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover bg-slate-100"
+                    width={40}
+                    height={40}
+                    referrerPolicy="no-referrer"
+                    className="rounded-full object-cover bg-slate-100"
                   />
                 ) : (
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
