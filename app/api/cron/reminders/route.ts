@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { format, addHours, parseISO } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
@@ -68,6 +68,7 @@ export async function GET(request: Request) {
   const window24hStart = addHours(now, 23);
   const window24hEnd = addHours(now, 25);
 
+  const supabaseAdmin = getSupabaseAdmin();
   const { data: appts24h, error: error24h } = await supabaseAdmin
     .from('appointments')
     .select('*, clients(nome, whatsapp), user_profile:profiles!appointments_user_id_fkey(whatsapp)')
