@@ -80,6 +80,7 @@ export default function Home() {
   const [editingClient, setEditingClient] = useState<any>(null);
   const [clients, setClients] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [properties, setProperties] = useState<any[]>([]);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<any>(null);
   const [selectedViewAppointment, setSelectedViewAppointment] = useState<any>(null);
@@ -203,6 +204,24 @@ export default function Home() {
 
     fetchAppointments();
 
+    const fetchProperties = async () => {
+      try {
+        if (!supabase) return;
+        const { data, error } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        setProperties(data || []);
+      } catch (err: any) {
+        console.error("Error fetching properties:", err);
+      }
+    };
+
+    fetchProperties();
+
     // Subscribe to changes
     const channel = supabase
       .channel('db_changes')
@@ -211,6 +230,9 @@ export default function Home() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
         fetchAppointments();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'properties' }, () => {
+        fetchProperties();
       })
       .subscribe();
 
@@ -490,7 +512,18 @@ export default function Home() {
         {/* View Content */}
         <div className="px-4 md:p-8 flex-1 w-full max-w-7xl mx-auto py-6 md:py-8">
           <AnimatePresence mode="wait">
-            {activeView === 'dashboard' && <Dashboard metrics={metrics} clients={clients} appointments={appointments} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} onSchedule={() => setActiveView('calendar')} />}
+            {activeView === 'dashboard' && (
+              <Dashboard 
+                metrics={metrics} 
+                clients={clients} 
+                appointments={appointments} 
+                properties={properties}
+                onClientClick={openClientDetail} 
+                onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} 
+                onSchedule={() => setActiveView('calendar')} 
+                onPropertyClick={(prop) => setSelectedPropertyForDetail(prop)}
+              />
+            )}
             {activeView === 'clients' && <ClientLedger clients={clients} onClientClick={openClientDetail} onAddLead={() => { setEditingClient(null); setIsLeadModalOpen(true); }} onRefresh={refreshClientsData} />}
             {activeView === 'calendar' && (
               <CalendarView 
@@ -1101,6 +1134,7 @@ function ClientLedger({ clients, onClientClick, onAddLead, onRefresh }: { client
 
 function SettingsView({ profile }: { profile: any }) {
   const [name, setName] = useState(profile?.name || '');
+  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp || '');
   const [photoUrl, setPhotoUrl] = useState(profile?.photo_url || '');
   const [loading, setLoading] = useState(false);
   const { user, refreshProfile } = useSupabase();
@@ -1139,6 +1173,7 @@ function SettingsView({ profile }: { profile: any }) {
         .from('profiles')
         .update({ 
           name, 
+          whatsapp,
           photo_url: photoUrl,
           updated_at: new Date().toISOString()
         })
@@ -1203,6 +1238,17 @@ function SettingsView({ profile }: { profile: any }) {
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">E-mail</label>
             <input type="email" value={profile?.email} disabled className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 opacity-50 cursor-not-allowed" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Meu WhatsApp (para lembretes)</label>
+            <input 
+              type="text" 
+              value={whatsapp} 
+              onChange={(e) => setWhatsapp(e.target.value)} 
+              placeholder="Ex: 5511999999999"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-900/20 outline-none transition-all" 
+            />
+            <p className="text-[10px] text-slate-400 font-medium ml-1">Insira seu número com DDD para receber avisos automáticos de agenda.</p>
           </div>
         </div>
 

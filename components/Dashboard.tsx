@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { 
   Users, 
@@ -10,8 +10,7 @@ import {
   Building2, 
   Zap, 
   Calendar, 
-  Clock, 
-  User 
+  Clock 
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -28,12 +27,14 @@ interface DashboardProps {
   metrics: { totalClients: number, activePipeline: number, salesThisMonth: number };
   clients: any[];
   appointments: any[];
+  properties: any[];
   onClientClick: (id: string) => void;
+  onPropertyClick: (prop: any) => void;
   onAddLead: () => void;
   onSchedule: () => void;
 }
 
-export function Dashboard({ metrics, clients, appointments, onClientClick, onAddLead, onSchedule }: DashboardProps) {
+export function Dashboard({ metrics, clients, appointments, properties, onClientClick, onPropertyClick, onAddLead, onSchedule }: DashboardProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
     setMounted(true);
@@ -58,11 +59,57 @@ export function Dashboard({ metrics, clients, appointments, onClientClick, onAdd
     { name: 'Venda', value: clients.filter(c => c.status === 'Fechado').length, fill: '#ef4444' },
   ];
 
-  const recentLeads = [...clients].sort((a, b) => {
-    const timeA = Math.max(new Date(a.updated_at || a.created_at).getTime(), new Date(a.created_at).getTime());
-    const timeB = Math.max(new Date(b.updated_at || b.created_at).getTime(), new Date(b.created_at).getTime());
-    return timeB - timeA;
-  }).slice(0, 5);
+  const recentActivities = useMemo(() => {
+    const activities: any[] = [];
+
+    // Add recent leads
+    clients.forEach(c => {
+      activities.push({
+        id: c.id,
+        type: 'lead',
+        title: c.nome,
+        description: 'Novo lead interessado',
+        time: new Date(c.created_at),
+        icon: Users,
+        color: 'text-blue-500',
+        onClick: () => onClientClick(c.id),
+        photo: getClientPhoto(c)
+      });
+    });
+
+    // Add recent appointments
+    appointments.forEach(app => {
+      activities.push({
+        id: app.id,
+        type: 'appointment',
+        title: app.title,
+        description: `Agendamento: ${app.type || 'evento'}`,
+        time: new Date(app.created_at || app.start_time),
+        icon: Calendar,
+        color: 'text-emerald-500',
+        onClick: onSchedule,
+      });
+    });
+
+    // Add recent properties
+    properties.forEach(p => {
+      activities.push({
+        id: p.id,
+        type: 'property',
+        title: p.address || p.owner_name,
+        description: 'Novo imóvel cadastrado',
+        time: new Date(p.created_at),
+        icon: Building2,
+        color: 'text-amber-500',
+        onClick: () => onPropertyClick(p),
+        photo: p.property_photos?.[0]
+      });
+    });
+
+    return activities
+      .sort((a, b) => b.time.getTime() - a.time.getTime())
+      .slice(0, 8);
+  }, [clients, appointments, properties, onClientClick, onPropertyClick, onSchedule]);
 
   const upcomingAppointments = appointments
     .filter(app => new Date(app.start_time) >= new Date())
@@ -171,23 +218,43 @@ export function Dashboard({ metrics, clients, appointments, onClientClick, onAdd
         <div className="col-span-12 lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900 mb-6">Atividade Recente</h3>
           <div className="space-y-6">
-            {recentLeads.map((client) => (
-              <div key={client.id} className="flex items-center gap-4 group cursor-pointer" onClick={() => onClientClick(client.id)}>
-                {getClientPhoto(client) ? (
-                  <img src={getClientPhoto(client)!} alt="" className="w-10 h-10 rounded-xl object-cover" />
+            {recentActivities.map((activity) => (
+              <div 
+                key={`${activity.type}-${activity.id}`} 
+                className="flex items-center gap-4 group cursor-pointer" 
+                onClick={activity.onClick}
+              >
+                {activity.photo ? (
+                  <img src={activity.photo} alt="" className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-50" />
                 ) : (
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
-                    <User className="w-5 h-5" />
+                  <div className={`w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 ${activity.color}`}>
+                    <activity.icon className="w-5 h-5" />
                   </div>
                 )}
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{client.nome}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                    {activity.title}
+                  </p>
+                  <p className="text-[0.65rem] font-medium text-slate-400 truncate">
+                    {activity.description}
+                  </p>
                 </div>
-                <span className="text-[0.65rem] font-bold text-[#003366]">
-                  {format(new Date(client.updated_at || client.created_at), 'HH:mm')}
-                </span>
+                <div className="text-right">
+                  <span className="text-[0.65rem] font-bold text-[#003366] block">
+                    {format(activity.time, 'HH:mm')}
+                  </span>
+                  <span className="text-[0.55rem] font-medium text-slate-300 block uppercase tracking-tighter">
+                    {format(activity.time, 'dd/MM')}
+                  </span>
+                </div>
               </div>
             ))}
+            {recentActivities.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-10 text-slate-300">
+                <Clock className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-xs font-bold uppercase tracking-widest opacity-40">Sem atividades recentes</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
