@@ -2088,18 +2088,24 @@ function CalendarView({ appointments, onEdit, onAdd }: {
             const dayApps = getDayAppointments(day);
             const isTodayDay = isToday(day);
             const isCurrentMonth = isSameMonth(day, monthStart);
-            const isPastDay = isBefore(day, startOfToday()) && isCurrentMonth;
+            const isPastDay = isBefore(day, startOfToday());
+            const isFutureDay = !isPastDay && !isTodayDay;
 
             return (
               <div 
                 key={idx} 
-                className={`min-h-[140px] p-2 border-r border-b border-slate-200 last:border-r-0 relative transition-all hover:bg-slate-50 cursor-pointer group ${!isCurrentMonth ? 'bg-slate-50/50' : ''} ${isPastDay ? 'opacity-70 grayscale-[0.3]' : ''}`}
+                className={`min-h-[140px] p-2 border-r border-b border-slate-200 last:border-r-0 relative transition-all hover:bg-slate-50 cursor-pointer group 
+                  ${!isCurrentMonth ? 'bg-slate-50/50 opacity-40' : isPastDay ? 'bg-slate-50/80' : 'bg-white'}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-sm font-black w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
                     isTodayDay 
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
-                      : isCurrentMonth ? 'text-slate-900' : 'text-slate-200'
+                      ? 'bg-[#1E90FF] text-white shadow-lg shadow-blue-200' 
+                      : !isCurrentMonth 
+                        ? 'text-slate-300' 
+                        : isPastDay 
+                          ? 'text-slate-400' 
+                          : 'text-[#00008B]'
                   }`}>
                     {format(day, 'd')}
                   </span>
